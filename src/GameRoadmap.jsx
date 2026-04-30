@@ -62,8 +62,9 @@ const GameRoadmap = ({ user }) => {
   // Quản lý trạng thái hiển thị giao diện trên Mobile
   const [showMobileMap, setShowMobileMap] = useState(false);
   
-  // Quản lý bảng chi tiết sự kiện
+  // Quản lý bảng chi tiết sự kiện và bảng Deadline
   const [selectedEventDetail, setSelectedEventDetail] = useState(null); 
+  const [isDeadlineModalOpen, setIsDeadlineModalOpen] = useState(false);
 
   // Khởi tạo state với dữ liệu mặc định ban đầu
   const [profile, setProfile] = useState({
@@ -82,10 +83,7 @@ const GameRoadmap = ({ user }) => {
     const unsub = onSnapshot(doc(db, "users", user.uid), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        // Cập nhật thông tin profile nếu có
         if (data.profile) setProfile(data.profile);
-        
-        // Cập nhật danh sách sự kiện, chuyển đổi Firestore Timestamp thành JavaScript Date
         if (data.events) {
           const cloudEvents = data.events.map(ev => ({
             ...ev,
@@ -95,17 +93,14 @@ const GameRoadmap = ({ user }) => {
           setEvents(cloudEvents);
         }
       } else {
-        // Nếu người dùng mới (chưa có document trong Firestore), tạo document với dữ liệu mặc định
         saveToCloud(profile, events);
       }
     });
     
-    // Hủy đăng ký lắng nghe khi component unmount
     return () => unsub();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  // Hàm tiện ích để đồng bộ dữ liệu (cả profile và events) lên Firestore
   const saveToCloud = async (newProfile, newEvents) => {
     if (!user) return;
     try {
@@ -144,7 +139,6 @@ const GameRoadmap = ({ user }) => {
       reader.readAsDataURL(e.target.files[0]);
       setCropTarget(target);
       
-      // Thiết lập tỷ lệ cắt ảnh tùy thuộc vào việc ảnh đó dùng cho profile hay event
       if (target === 'profile') {
         setCropAspectRatio(9 / 16); 
         setCrop({ unit: '%', width: 50, aspect: 9/16 });
@@ -152,9 +146,8 @@ const GameRoadmap = ({ user }) => {
         setCropAspectRatio(21 / 9); 
         setCrop({ unit: '%', width: 80, aspect: 21/9 });
       }
-      
       setIsCropModalOpen(true);
-      e.target.value = ''; // Đặt lại giá trị input file để có thể chọn lại cùng một file
+      e.target.value = ''; 
     }
   };
 
@@ -168,7 +161,6 @@ const GameRoadmap = ({ user }) => {
     canvas.height = completedCrop.height;
     const ctx = canvas.getContext('2d');
 
-    // Vẽ phần ảnh đã cắt lên canvas
     ctx.drawImage(
       image,
       completedCrop.x * scaleX, completedCrop.y * scaleY,
@@ -176,10 +168,8 @@ const GameRoadmap = ({ user }) => {
       0, 0, completedCrop.width, completedCrop.height
     );
 
-    // Chuyển đổi canvas thành chuỗi mã Base64 để lưu vĩnh viễn lên mây
     const croppedImageUrl = canvas.toDataURL('image/jpeg', 0.8);
 
-    // Cập nhật formData dựa trên đích đến của ảnh (event hay profile)
     if (cropTarget === 'event') {
       setEventFormData({ ...eventFormData, croppedImage: croppedImageUrl });
     } else if (cropTarget === 'profile') {
@@ -193,19 +183,17 @@ const GameRoadmap = ({ user }) => {
   // 5. CÁC HÀM XỬ LÝ NGƯỜI DÙNG TƯƠNG TÁC
   // ==========================================
   
-  // Lưu thay đổi profile
   const handleSaveProfile = () => {
     const updatedProfile = {
       avatar: profileFormData.avatar,
       title: profileFormData.title.toUpperCase(),
       subtitle: profileFormData.subtitle.toUpperCase()
     };
-    setProfile(updatedProfile); // Cập nhật state cục bộ
-    saveToCloud(updatedProfile, events); // Đồng bộ lên Firestore
+    setProfile(updatedProfile); 
+    saveToCloud(updatedProfile, events); 
     alert("Đã đồng bộ thiết lập lên Cloud!");
   };
 
-  // Thêm mới một sự kiện
   const handleAddEvent = (e) => {
     e.preventDefault();
     const startObj = new Date(eventFormData.startDate);
@@ -214,7 +202,6 @@ const GameRoadmap = ({ user }) => {
 
     const dateStr = `${startObj.getDate().toString().padStart(2, '0')}/${(startObj.getMonth() + 1).toString().padStart(2, '0')} - ${endObj.getDate().toString().padStart(2, '0')}/${(endObj.getMonth() + 1).toString().padStart(2, '0')}`;
 
-    // Logic tính toán dòng (row) để các sự kiện không đè lên nhau
     let assignedRow = 0;
     let isRowOccupied = true;
     while (isRowOccupied) {
@@ -238,19 +225,17 @@ const GameRoadmap = ({ user }) => {
     };
 
     const updatedEvents = [...events, newEvent];
-    setEvents(updatedEvents); // Cập nhật state cục bộ
-    saveToCloud(profile, updatedEvents); // Đồng bộ lên Firestore
-    setEventFormData({ title: '', startDate: '', endDate: '', rewards: '', croppedImage: null }); // Xóa trắng form
+    setEvents(updatedEvents); 
+    saveToCloud(profile, updatedEvents); 
+    setEventFormData({ title: '', startDate: '', endDate: '', rewards: '', croppedImage: null }); 
   };
 
-  // Xóa một sự kiện
   const handleDeleteEvent = (idToRemove) => { 
     const updatedEvents = events.filter(e => e.id !== idToRemove);
-    setEvents(updatedEvents); // Cập nhật state cục bộ
-    saveToCloud(profile, updatedEvents); // Đồng bộ lên Firestore
+    setEvents(updatedEvents); 
+    saveToCloud(profile, updatedEvents); 
   };
 
-  // Đăng xuất khỏi hệ thống Firebase Authentication
   const handleLogout = () => {
     signOut(auth).catch((error) => console.error("Lỗi đăng xuất:", error));
   };
@@ -279,18 +264,25 @@ const GameRoadmap = ({ user }) => {
             </div>
           </div>
 
-          <div className="ml-auto relative z-10 mb-1.5 md:mb-2 mr-2 md:mr-4 flex gap-2">
+          {/* CÁC NÚT BẤM TRÊN HEADER */}
+          <div className="ml-auto relative z-10 mb-1.5 md:mb-2 mr-2 md:mr-4 flex gap-1.5 md:gap-2">
+             <button 
+                onClick={() => setIsDeadlineModalOpen(true)}
+                className="bg-yellow-400 text-yellow-900 font-black px-3 md:px-5 py-1 md:py-1.5 rounded-full shadow-[0_0_10px_rgba(250,204,21,0.6)] hover:scale-105 transition-transform text-[10px] md:text-sm tracking-wide border-2 border-white hover:border-yellow-200 whitespace-nowrap"
+              >
+                ⏰ Deadline
+              </button>
              <button 
                 onClick={() => { setProfileFormData(profile); setIsSettingsOpen(true); }}
-                className="bg-white text-[#4f46e5] font-black px-3 md:px-6 py-1 md:py-1.5 rounded-full shadow-[0_0_10px_rgba(255,255,255,0.5)] hover:scale-105 transition-transform text-[10px] md:text-sm tracking-wide border-2 border-transparent hover:border-[#38bdf8] whitespace-nowrap"
+                className="bg-white text-[#4f46e5] font-black px-3 md:px-5 py-1 md:py-1.5 rounded-full shadow-[0_0_10px_rgba(255,255,255,0.5)] hover:scale-105 transition-transform text-[10px] md:text-sm tracking-wide border-2 border-transparent hover:border-[#38bdf8] whitespace-nowrap"
               >
-                Cài Đặt Lịch
+                Cài Đặt
               </button>
               <button 
                 onClick={handleLogout}
                 className="bg-red-500 text-white font-black px-3 md:px-4 py-1 md:py-1.5 rounded-full shadow-[0_0_10px_rgba(239,68,68,0.5)] hover:bg-red-400 hover:scale-105 transition-transform text-[10px] md:text-sm tracking-wide border-2 border-transparent whitespace-nowrap"
               >
-                Đăng Xuất
+                Thoát
               </button>
           </div>
         </div>
@@ -381,7 +373,7 @@ const GameRoadmap = ({ user }) => {
                       <div 
                         key={event.id} 
                         onClick={() => setSelectedEventDetail(event)} 
-                        className="absolute h-[64px] bg-white border-2 border-[#cbd5e1] rounded-lg shadow-sm flex items-center pr-1 md:pr-2 z-20 cursor-pointer hover:shadow-md hover:border-[#3b82f6] transition-all" 
+                        className="absolute h-[64px] bg-white border-2 border-[#cbd5e1] rounded-lg shadow-sm flex items-center pr-1 md:pr-2 z-20 cursor-pointer hover:shadow-md hover:border-[#3b82f6] hover:scale-[1.01] transition-all" 
                         style={{ left: `${leftPercent}%`, width: `${widthPercent}%`, top: `${topPosition}px` }}
                       >
                         
@@ -416,6 +408,58 @@ const GameRoadmap = ({ user }) => {
         </div>
 
       </div>
+
+      {/* ========================================== */}
+      {/* MODAL SỰ KIỆN SẮP HẾT HẠN (DEADLINE) */}
+      {/* ========================================== */}
+      {isDeadlineModalOpen && (
+        <div 
+          className="fixed inset-0 bg-black/60 flex items-center justify-center z-[110] p-4 backdrop-blur-sm" 
+          onClick={() => setIsDeadlineModalOpen(false)}
+        >
+          <div 
+            className="bg-white border-4 border-yellow-400 rounded-2xl w-full max-w-[400px] max-h-[80vh] flex flex-col shadow-[0_0_30px_rgba(250,204,21,0.5)] animate-[fadeIn_0.2s_ease-out]" 
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="bg-yellow-400 p-3 text-center rounded-t-lg relative">
+              <h2 className="text-yellow-900 font-black text-lg">⏰ SỰ KIỆN SẮP DEADLINE</h2>
+              <button 
+                onClick={() => setIsDeadlineModalOpen(false)} 
+                className="absolute top-1/2 -translate-y-1/2 right-3 w-7 h-7 bg-white hover:bg-red-500 text-yellow-600 hover:text-white rounded-full font-black flex items-center justify-center transition-colors shadow-sm"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto custom-scrollbar flex-1 space-y-3">
+              {events.filter(ev => ev.end >= now).length === 0 ? (
+                <p className="text-center text-slate-500 font-bold text-sm py-4">Chưa có sự kiện nào sắp tới! Tuyệt vời!</p>
+              ) : (
+                events
+                  .filter(ev => ev.end >= now)
+                  .sort((a, b) => a.end - b.end)
+                  .map(ev => {
+                    const daysLeft = Math.ceil((ev.end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                    return (
+                      <div 
+                        key={ev.id} 
+                        className="border-2 border-slate-200 bg-slate-50 rounded-xl p-3 flex gap-3 hover:border-yellow-400 hover:bg-yellow-50 cursor-pointer transition-colors" 
+                        onClick={() => { setIsDeadlineModalOpen(false); setSelectedEventDetail(ev); }}
+                      >
+                         <img src={ev.image} className="w-12 h-12 rounded-lg object-cover shadow-sm" alt="thumb"/>
+                         <div className="flex-1">
+                           <h4 className="font-bold text-slate-800 text-sm leading-tight mb-1">{ev.title}</h4>
+                           <span className="text-[10px] font-black bg-red-100 text-red-600 px-2 py-0.5 rounded border border-red-200">
+                             CÒN {daysLeft} NGÀY
+                           </span>
+                         </div>
+                      </div>
+                    )
+                  })
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ========================================== */}
       {/* MODAL CÀI ĐẶT (ĐỔI GIAO DIỆN / QUẢN LÝ LỊCH) */}
@@ -513,51 +557,55 @@ const GameRoadmap = ({ user }) => {
       )}
 
       {/* ========================================== */}
-      {/* MODAL XEM CHI TIẾT SỰ KIỆN (KHI BẤM VÀO THẺ) */}
+      {/* MODAL XEM CHI TIẾT SỰ KIỆN (CHUẨN ANIME) */}
       {/* ========================================== */}
       {selectedEventDetail && (
         <div 
-          className="fixed inset-0 bg-black/80 flex items-center justify-center z-[110] p-4 backdrop-blur-sm" 
-          onClick={() => setSelectedEventDetail(null)} // Bấm ra ngoài bóng đen để đóng
+          className="fixed inset-0 bg-black/40 flex items-center justify-center z-[120] p-4 backdrop-blur-md" 
+          onClick={() => setSelectedEventDetail(null)}
         >
           <div 
-            className="bg-[#1e293b] border-2 border-cyan-500 rounded-xl w-full max-w-[400px] overflow-hidden shadow-[0_0_30px_rgba(6,182,212,0.5)] animate-[fadeIn_0.2s_ease-out]" 
-            onClick={e => e.stopPropagation()} // Ngăn chặn sự kiện click lan ra ngoài
+            className="bg-white border-[4px] border-pink-300 rounded-[2rem] w-full max-w-[400px] overflow-hidden shadow-[0_0_40px_rgba(236,72,153,0.5)] animate-[fadeIn_0.2s_ease-out] relative" 
+            onClick={e => e.stopPropagation()}
           >
+            {/* Nút Tắt */}
+            <button 
+              onClick={() => setSelectedEventDetail(null)} 
+              className="absolute top-4 right-4 w-8 h-8 bg-white hover:bg-pink-500 text-pink-500 hover:text-white border-2 border-pink-200 hover:border-pink-500 rounded-full flex items-center justify-center font-black shadow-md transition-all text-sm z-10"
+            >
+              ✕
+            </button>
+
             {/* Phần ảnh bìa */}
-            <div className="w-full h-40 md:h-48 bg-slate-800 relative">
-              <img src={selectedEventDetail.image} alt="Event Cover" className="w-full h-full object-cover" />
-              <button 
-                onClick={() => setSelectedEventDetail(null)} 
-                className="absolute top-2 right-2 w-8 h-8 bg-black/60 hover:bg-red-500 text-white rounded-full flex items-center justify-center font-bold backdrop-blur-sm transition-colors text-sm"
-              >
-                ✕
-              </button>
+            <div className="w-full h-40 md:h-52 bg-pink-50 relative p-2">
+              <div className="w-full h-full rounded-2xl overflow-hidden border-2 border-pink-200 shadow-inner">
+                <img src={selectedEventDetail.image} alt="Event Cover" className="w-full h-full object-cover" />
+              </div>
             </div>
             
-            {/* Phần thông tin chi tiết */}
-            <div className="p-5 md:p-6">
-              <h3 className="text-white font-black text-lg md:text-xl mb-3 leading-tight break-words border-b border-slate-700 pb-3">
-                {selectedEventDetail.title}
+            {/* Phần thông tin chi tiết với tông màu sáng */}
+            <div className="p-6 md:p-8 bg-gradient-to-b from-white to-pink-50/50">
+              <h3 className="text-[#4c1d95] font-black text-xl md:text-2xl mb-5 leading-tight break-words text-center drop-shadow-sm">
+                ✨ {selectedEventDetail.title} ✨
               </h3>
               
-              <div className="space-y-3">
-                <div className="flex items-start gap-3">
-                  <span className="text-xl md:text-2xl mt-0.5">🕒</span>
+              <div className="space-y-4">
+                <div className="flex items-center gap-3 bg-blue-50 p-3 rounded-xl border border-blue-100 shadow-sm">
+                  <span className="text-2xl drop-shadow-sm">🌸</span>
                   <div>
-                    <p className="text-slate-400 text-[10px] font-bold uppercase mb-0.5">Thời gian diễn ra</p>
-                    <p className="text-cyan-400 font-bold text-sm bg-cyan-900/30 px-3 py-1.5 rounded-md border border-cyan-500/30 w-fit">
+                    <p className="text-blue-400 text-[10px] font-black uppercase mb-0.5 tracking-wider">Thời gian</p>
+                    <p className="text-blue-800 font-bold text-sm">
                       {selectedEventDetail.dateStr}
                     </p>
                   </div>
                 </div>
 
                 {selectedEventDetail.rewards && (
-                  <div className="flex items-start gap-3">
-                    <span className="text-xl md:text-2xl mt-0.5">💎</span>
+                  <div className="flex items-center gap-3 bg-amber-50 p-3 rounded-xl border border-amber-100 shadow-sm">
+                    <span className="text-2xl drop-shadow-sm">⭐</span>
                     <div>
-                      <p className="text-slate-400 text-[10px] font-bold uppercase mb-0.5">Phần thưởng / Ghi chú</p>
-                      <p className="text-yellow-400 font-bold text-sm bg-yellow-900/30 px-3 py-1.5 rounded-md border border-yellow-500/30 w-fit break-words">
+                      <p className="text-amber-400 text-[10px] font-black uppercase mb-0.5 tracking-wider">Ghi chú / Thưởng</p>
+                      <p className="text-amber-700 font-bold text-sm break-words">
                         {selectedEventDetail.rewards}
                       </p>
                     </div>
