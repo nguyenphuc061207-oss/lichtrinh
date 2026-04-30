@@ -409,8 +409,8 @@ const GameRoadmap = ({ user }) => {
 
       </div>
 
-      {/* ========================================== */}
-      {/* MODAL SỰ KIỆN SẮP HẾT HẠN (DEADLINE) */}
+ {/* ========================================== */}
+      {/* MODAL SỰ KIỆN SẮP HẾT HẠN (DEADLINE <= 3 NGÀY) */}
       {/* ========================================== */}
       {isDeadlineModalOpen && (
         <div 
@@ -418,44 +418,58 @@ const GameRoadmap = ({ user }) => {
           onClick={() => setIsDeadlineModalOpen(false)}
         >
           <div 
-            className="bg-white border-4 border-yellow-400 rounded-2xl w-full max-w-[400px] max-h-[80vh] flex flex-col shadow-[0_0_30px_rgba(250,204,21,0.5)] animate-[fadeIn_0.2s_ease-out]" 
+            className="bg-white border-4 border-red-400 rounded-2xl w-full max-w-[400px] max-h-[80vh] flex flex-col shadow-[0_0_30px_rgba(248,113,113,0.5)] animate-[fadeIn_0.2s_ease-out]" 
             onClick={e => e.stopPropagation()}
           >
-            <div className="bg-yellow-400 p-3 text-center rounded-t-lg relative">
-              <h2 className="text-yellow-900 font-black text-lg">⏰ SỰ KIỆN SẮP DEADLINE</h2>
+            <div className="bg-red-500 p-3 text-center rounded-t-lg relative">
+              <h2 className="text-white font-black text-lg drop-shadow-md">🚨 BÁO ĐỘNG DEADLINE</h2>
               <button 
                 onClick={() => setIsDeadlineModalOpen(false)} 
-                className="absolute top-1/2 -translate-y-1/2 right-3 w-7 h-7 bg-white hover:bg-red-500 text-yellow-600 hover:text-white rounded-full font-black flex items-center justify-center transition-colors shadow-sm"
+                className="absolute top-1/2 -translate-y-1/2 right-3 w-7 h-7 bg-white hover:bg-slate-200 text-red-600 rounded-full font-black flex items-center justify-center transition-colors shadow-sm"
               >
                 ✕
               </button>
             </div>
             <div className="p-4 overflow-y-auto custom-scrollbar flex-1 space-y-3">
-              {events.filter(ev => ev.end >= now).length === 0 ? (
-                <p className="text-center text-slate-500 font-bold text-sm py-4">Chưa có sự kiện nào sắp tới! Tuyệt vời!</p>
-              ) : (
-                events
-                  .filter(ev => ev.end >= now)
+              {(() => {
+                // Lọc ra các sự kiện còn từ 0 đến 3 ngày
+                const urgentEvents = events.filter(ev => {
+                  const daysLeft = Math.ceil((ev.end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                  return daysLeft >= 0 && daysLeft <= 3;
+                });
+
+                // Nếu không có sự kiện nào sắp hết hạn
+                if (urgentEvents.length === 0) {
+                  return (
+                    <div className="text-center py-8">
+                      <p className="text-4xl mb-2">☕</p>
+                      <p className="text-slate-500 font-bold text-sm">Chưa có deadline nào trong 3 ngày tới!<br/>Cứ thong thả chill nhé!</p>
+                    </div>
+                  );
+                }
+
+                // Nếu có sự kiện, sắp xếp theo thời gian tăng dần (cái nào gấp nhất lên đầu)
+                return urgentEvents
                   .sort((a, b) => a.end - b.end)
                   .map(ev => {
                     const daysLeft = Math.ceil((ev.end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
                     return (
                       <div 
                         key={ev.id} 
-                        className="border-2 border-slate-200 bg-slate-50 rounded-xl p-3 flex gap-3 hover:border-yellow-400 hover:bg-yellow-50 cursor-pointer transition-colors" 
+                        className="border-2 border-red-200 bg-red-50 rounded-xl p-3 flex gap-3 hover:border-red-500 hover:bg-red-100 cursor-pointer transition-colors" 
                         onClick={() => { setIsDeadlineModalOpen(false); setSelectedEventDetail(ev); }}
                       >
                          <img src={ev.image} className="w-12 h-12 rounded-lg object-cover shadow-sm" alt="thumb"/>
                          <div className="flex-1">
                            <h4 className="font-bold text-slate-800 text-sm leading-tight mb-1">{ev.title}</h4>
-                           <span className="text-[10px] font-black bg-red-100 text-red-600 px-2 py-0.5 rounded border border-red-200">
-                             CÒN {daysLeft} NGÀY
+                           <span className="text-[10px] font-black bg-red-500 text-white px-2 py-0.5 rounded shadow-sm animate-pulse">
+                             {daysLeft === 0 ? 'HẾT HẠN HÔM NAY 🔥' : `CÒN ĐÚNG ${daysLeft} NGÀY ⏳`}
                            </span>
                          </div>
                       </div>
                     )
-                  })
-              )}
+                  });
+              })()}
             </div>
           </div>
         </div>
