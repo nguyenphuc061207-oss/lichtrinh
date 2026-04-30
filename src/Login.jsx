@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { auth } from './firebase';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithRedirect } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 
 const Login = () => {
   const [isRegister, setIsRegister] = useState(false);
@@ -22,12 +22,13 @@ const Login = () => {
     }
   };
 
- const handleGoogleLogin = async () => {
+  const handleGoogleLogin = async (e) => {
+    e.preventDefault(); // Ngăn nút bấm làm tải lại trang
     setError('');
     const provider = new GoogleAuthProvider();
     try {
-      // Đổi từ Popup sang Redirect để không bị chặn trên Mobile
-      await signInWithRedirect(auth, provider);
+      // Dùng Popup vì tên miền đã được thêm vào danh sách hợp lệ
+      await signInWithPopup(auth, provider);
     } catch (err) {
       setError(err.message.replace("Firebase: ", ""));
     }
@@ -87,6 +88,7 @@ const Login = () => {
         </div>
 
         <button 
+          type="button" 
           onClick={handleGoogleLogin}
           className="relative z-10 w-full bg-white hover:bg-slate-100 text-slate-800 font-bold p-3 rounded-lg flex items-center justify-center gap-3 transition-colors shadow-sm"
         >
