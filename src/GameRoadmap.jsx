@@ -1,8 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ReactCrop from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
+import { db, auth } from './firebase'; 
+import { doc, setDoc, onSnapshot } from "firebase/firestore";
+import { signOut } from "firebase/auth";
 
-const GameRoadmap = () => {
+// GameRoadmap nhận đối tượng 'user' từ component cha (thường là App.jsx)
+const GameRoadmap = ({ user }) => {
   // ==========================================
   // 1. CẤU HÌNH THỜI GIAN (3 NĂM & HÔM NAY)
   // ==========================================
@@ -52,43 +56,63 @@ const GameRoadmap = () => {
   const todayLabel = `HÔM NAY (${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')})`;
 
   // ==========================================
-  // 2. STATE DỮ LIỆU CỐT LÕI (NÂNG CẤP LƯU TRỮ TRÌNH DUYỆT)
+  // 2. STATE DỮ LIỆU CỐT LÕI VÀ ĐỒNG BỘ FIRESTORE
   // ==========================================
-  // Đã bổ sung LocalStorage để khi người khác vào hoặc bạn F5 không bị mất dữ liệu
-  const [profile, setProfile] = useState(() => {
-    const saved = localStorage.getItem('hi3_profile');
-    return saved ? JSON.parse(saved) : {
-      avatar: "https://images.unsplash.com/photo-1541562232579-512a21360020?q=80&w=800",
-      title: "TỔNG QUAN PHIÊN BẢN", 
-      subtitle: "v7.3"
-    };
+  // Khởi tạo state với dữ liệu mặc định ban đầu
+  const [profile, setProfile] = useState({
+    avatar: "https://images.unsplash.com/photo-1541562232579-512a21360020?q=80&w=800",
+    title: "TỔNG QUAN PHIÊN BẢN", 
+    subtitle: "v7.3"
   });
   
-  const [events, setEvents] = useState(() => {
-    const saved = localStorage.getItem('hi3_events');
-    if (saved) {
-      // Phục hồi lại định dạng Date sau khi lấy từ LocalStorage ra
-      const parsed = JSON.parse(saved);
-      return parsed.map(ev => ({...ev, start: new Date(ev.start), end: new Date(ev.end)}));
-    }
-    return [{
-      id: "ev1",
-      title: "ĐẠI SỐ TUYẾN TÍNH",
-      dateStr: "22/04 - 01/05",
-      start: new Date(currentYear, 3, 22),
-      end: new Date(currentYear, 4, 1),
-      image: "https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=200&q=80",
-      rewards: "EXP x20 | Crystals x1600",
-      trackRow: 0
-    }];
-  });
+  const [events, setEvents] = useState([]);
 
-  // Tự động lưu khi có thay đổi
-  useEffect(() => { localStorage.setItem('hi3_profile', JSON.stringify(profile)); }, [profile]);
-  useEffect(() => { localStorage.setItem('hi3_events', JSON.stringify(events)); }, [events]);
+  // Lắng nghe thay đổi dữ liệu từ Firestore dựa trên ID của người dùng đang đăng nhập
+  useEffect(() => {
+    if (!user) return;
+    
+    // onSnapshot cung cấp khả năng cập nhật thời gian thực từ Firestore
+    const unsub = onSnapshot(doc(db, "users", user.uid), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        // Cập nhật thông tin profile nếu có
+        if (data.profile) setProfile(data.profile);
+        
+        // Cập nhật danh sách sự kiện, chuyển đổi Firestore Timestamp thành JavaScript Date
+        if (data.events) {
+          const cloudEvents = data.events.map(ev => ({
+            ...ev,
+            start: ev.start.toDate ? ev.start.toDate() : new Date(ev.start),
+            end: ev.end.toDate ? ev.end.toDate() : new Date(ev.end)
+          }));
+          setEvents(cloudEvents);
+        }
+      } else {
+        // Nếu người dùng mới (chưa có document trong Firestore), tạo document với dữ liệu mặc định
+        saveToCloud(profile, events);
+      }
+    });
+    
+    // Hủy đăng ký lắng nghe khi component unmount
+    return () => unsub();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  // Hàm tiện ích để đồng bộ dữ liệu (cả profile và events) lên Firestore
+  const saveToCloud = async (newProfile, newEvents) => {
+    if (!user) return;
+    try {
+      await setDoc(doc(db, "users", user.uid), {
+        profile: newProfile,
+        events: newEvents
+      });
+    } catch (error) {
+      console.error("Lỗi đồng bộ mây:", error);
+    }
+  };
 
   // ==========================================
-  // 3. HỆ THỐNG MENU CÀI ĐẶT
+  // 3. HỆ THỐNG MENU CÀI ĐẶT VÀ BIỂU MẪU
   // ==========================================
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('profile'); 
@@ -96,7 +120,7 @@ const GameRoadmap = () => {
   const [eventFormData, setEventFormData] = useState({ title: '', startDate: '', endDate: '', rewards: '' });
 
   // ==========================================
-  // 4. HỆ THỐNG CẮT ẢNH (FIXED ASPECT RATIO)
+  // 4. CẮT ẢNH VÀ XỬ LÝ HÌNH ẢNH
   // ==========================================
   const [isCropModalOpen, setIsCropModalOpen] = useState(false);
   const [upImg, setUpImg] = useState(); 
@@ -113,6 +137,7 @@ const GameRoadmap = () => {
       reader.readAsDataURL(e.target.files[0]);
       setCropTarget(target);
       
+      // Thiết lập tỷ lệ cắt ảnh tùy thuộc vào việc ảnh đó dùng cho profile hay event
       if (target === 'profile') {
         setCropAspectRatio(9 / 16); 
         setCrop({ unit: '%', width: 50, aspect: 9/16 });
@@ -122,7 +147,7 @@ const GameRoadmap = () => {
       }
       
       setIsCropModalOpen(true);
-      e.target.value = ''; 
+      e.target.value = ''; // Đặt lại giá trị input file để có thể chọn lại cùng một file
     }
   };
 
@@ -136,6 +161,7 @@ const GameRoadmap = () => {
     canvas.height = completedCrop.height;
     const ctx = canvas.getContext('2d');
 
+    // Vẽ phần ảnh đã cắt lên canvas
     ctx.drawImage(
       image,
       completedCrop.x * scaleX, completedCrop.y * scaleY,
@@ -143,10 +169,12 @@ const GameRoadmap = () => {
       0, 0, completedCrop.width, completedCrop.height
     );
 
+    // Chuyển đổi canvas thành URL dạng chuỗi (Object URL)
     const croppedImageUrl = await new Promise((resolve) => {
       canvas.toBlob((blob) => resolve(URL.createObjectURL(blob)), 'image/png');
     });
 
+    // Cập nhật formData dựa trên đích đến của ảnh (event hay profile)
     if (cropTarget === 'event') {
       setEventFormData({ ...eventFormData, croppedImage: croppedImageUrl });
     } else if (cropTarget === 'profile') {
@@ -156,15 +184,23 @@ const GameRoadmap = () => {
     setUpImg(null);
   };
 
+  // ==========================================
+  // 5. CÁC HÀM XỬ LÝ NGƯỜI DÙNG TƯƠNG TÁC
+  // ==========================================
+  
+  // Lưu thay đổi profile
   const handleSaveProfile = () => {
-    setProfile({
+    const updatedProfile = {
       avatar: profileFormData.avatar,
       title: profileFormData.title.toUpperCase(),
       subtitle: profileFormData.subtitle.toUpperCase()
-    });
-    alert("Đã lưu thiết lập!");
+    };
+    setProfile(updatedProfile); // Cập nhật state cục bộ
+    saveToCloud(updatedProfile, events); // Đồng bộ lên Firestore
+    alert("Đã đồng bộ thiết lập lên Cloud!");
   };
 
+  // Thêm mới một sự kiện
   const handleAddEvent = (e) => {
     e.preventDefault();
     const startObj = new Date(eventFormData.startDate);
@@ -173,6 +209,7 @@ const GameRoadmap = () => {
 
     const dateStr = `${startObj.getDate().toString().padStart(2, '0')}/${(startObj.getMonth() + 1).toString().padStart(2, '0')} - ${endObj.getDate().toString().padStart(2, '0')}/${(endObj.getMonth() + 1).toString().padStart(2, '0')}`;
 
+    // Logic tính toán dòng (row) để các sự kiện không đè lên nhau
     let assignedRow = 0;
     let isRowOccupied = true;
     while (isRowOccupied) {
@@ -195,22 +232,36 @@ const GameRoadmap = () => {
       trackRow: assignedRow 
     };
 
-    setEvents([...events, newEvent]);
-    setEventFormData({ title: '', startDate: '', endDate: '', rewards: '', croppedImage: null });
+    const updatedEvents = [...events, newEvent];
+    setEvents(updatedEvents); // Cập nhật state cục bộ
+    saveToCloud(profile, updatedEvents); // Đồng bộ lên Firestore
+    setEventFormData({ title: '', startDate: '', endDate: '', rewards: '', croppedImage: null }); // Xóa trắng form
   };
 
-  const handleDeleteEvent = (idToRemove) => { setEvents(events.filter(e => e.id !== idToRemove)); };
+  // Xóa một sự kiện
+  const handleDeleteEvent = (idToRemove) => { 
+    const updatedEvents = events.filter(e => e.id !== idToRemove);
+    setEvents(updatedEvents); // Cập nhật state cục bộ
+    saveToCloud(profile, updatedEvents); // Đồng bộ lên Firestore
+  };
 
+  // Đăng xuất khỏi hệ thống Firebase Authentication
+  const handleLogout = () => {
+    signOut(auth).catch((error) => console.error("Lỗi đăng xuất:", error));
+  };
+
+  // ==========================================
+  // 6. RENDER GIAO DIỆN CHÍNH
+  // ==========================================
   return (
     <div className="min-h-screen flex items-center justify-center p-2 md:p-4 font-sans select-none bg-[#f1f5f9] bg-cover bg-center">
       
-      {/* KHUNG MAIN APP TỐI ƯU RESPONSIVE */}
+      {/* KHUNG APP CHÍNH */}
       <div className="w-full max-w-[1400px] h-[95vh] md:h-[780px] bg-white rounded-xl flex flex-col relative z-10 overflow-hidden shadow-[0_10px_40px_rgba(41,92,232,0.15)] border-[3px] md:border-[6px] border-[#e2e8f0]">
         
-        {/* TOP HEADER */}
+        {/* HEADER */}
         <div className="bg-[#4f46e5] bg-[url('https://www.transparenttextures.com/patterns/az-subtle.png')] h-14 md:h-16 flex justify-between items-end relative overflow-hidden border-b-[3px] md:border-b-[4px] border-[#38bdf8]">
           
-          {/* Thay đổi min-w cho điện thoại khỏi bị đè chữ */}
           <div className="bg-[#06b6d4] h-[120%] min-w-[200px] md:min-w-[280px] absolute -top-1 -left-2 flex items-center px-4 md:px-6 pl-6 md:pl-8 z-10 shadow-lg" style={{ clipPath: 'polygon(0 0, 90% 0, 100% 100%, 0% 100%)' }}>
             <div className="flex items-center gap-2 md:gap-3 mt-1">
               <div className="w-6 h-6 md:w-8 md:h-8 bg-white/20 rounded flex items-center justify-center border border-white/50">
@@ -223,28 +274,33 @@ const GameRoadmap = () => {
             </div>
           </div>
 
-          <div className="ml-auto relative z-10 mb-1.5 md:mb-2 mr-2 md:mr-4">
+          <div className="ml-auto relative z-10 mb-1.5 md:mb-2 mr-2 md:mr-4 flex gap-2">
              <button 
                 onClick={() => { setProfileFormData(profile); setIsSettingsOpen(true); }}
                 className="bg-white text-[#4f46e5] font-black px-3 md:px-6 py-1 md:py-1.5 rounded-full shadow-[0_0_10px_rgba(255,255,255,0.5)] hover:scale-105 transition-transform text-[10px] md:text-sm tracking-wide border-2 border-transparent hover:border-[#38bdf8] whitespace-nowrap"
               >
                 Cài Đặt Lịch
               </button>
+              <button 
+                onClick={handleLogout}
+                className="bg-red-500 text-white font-black px-3 md:px-4 py-1 md:py-1.5 rounded-full shadow-[0_0_10px_rgba(239,68,68,0.5)] hover:bg-red-400 hover:scale-105 transition-transform text-[10px] md:text-sm tracking-wide border-2 border-transparent whitespace-nowrap"
+              >
+                Đăng Xuất
+              </button>
           </div>
         </div>
 
-        {/* THÂN ỨNG DỤNG (Chuyển thành flex-col trên mobile, flex-row trên PC) */}
+        {/* NỘI DUNG CHÍNH (CỘT AVATAR VÀ DÒNG THỜI GIAN) */}
         <div className="flex flex-col md:flex-row flex-1 overflow-hidden bg-[#e0e7ff] p-2 gap-2">
           
-          {/* PANEL TRÁI (AVATAR) - Thu nhỏ lại trên mobile */}
+          {/* CỘT TRÁI (AVATAR) */}
           <div className="w-full md:w-[320px] h-[160px] md:h-full shrink-0 bg-white rounded-lg border-2 border-[#bfdbfe] relative flex flex-col justify-between z-20 shadow-sm p-2 md:p-3">
             <div className="w-full h-full relative rounded-md border-[3px] border-[#60a5fa] overflow-hidden shadow-[0_0_15px_rgba(96,165,250,0.3)] bg-slate-100">
-              {/* Trên mobile ảnh bị cắt dọc nên dùng object-top hoặc object-center */}
               <img src={profile.avatar} alt="Avatar" className="w-full h-full object-cover object-top md:object-center" />
             </div>
           </div>
 
-          {/* PANEL PHẢI (ROADMAP CUỘN NGANG) */}
+          {/* CỘT PHẢI (ROADMAP CUỘN NGANG) */}
           <div className="flex-1 flex flex-col overflow-x-auto relative custom-scrollbar bg-white rounded-lg border-2 border-[#bfdbfe] shadow-inner" ref={scrollContainerRef}>
             <div className="min-w-[22000px] flex flex-col h-full relative">
               
@@ -331,7 +387,7 @@ const GameRoadmap = () => {
       </div>
 
       {/* ========================================== */}
-      {/* MENU CÀI ĐẶT TỔNG (RESPONSIVE CHUẨN) */}
+      {/* MODAL CÀI ĐẶT (ĐỔI GIAO DIỆN / QUẢN LÝ LỊCH) */}
       {/* ========================================== */}
       {isSettingsOpen && (
         <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 backdrop-blur-sm p-2 md:p-4">
@@ -425,6 +481,7 @@ const GameRoadmap = () => {
         </div>
       )}
 
+      {/* STYLES CỤC BỘ DÀNH CHO THANH CUỘN VÀ INPUT DATE */}
       <style dangerouslySetInnerHTML={{__html: `
         .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; background-color: #f1f5f9; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
