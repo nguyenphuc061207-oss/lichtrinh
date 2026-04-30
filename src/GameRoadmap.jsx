@@ -173,10 +173,8 @@ const GameRoadmap = ({ user }) => {
       0, 0, completedCrop.width, completedCrop.height
     );
 
-    // Chuyển đổi canvas thành URL dạng chuỗi (Object URL)
-    const croppedImageUrl = await new Promise((resolve) => {
-      canvas.toBlob((blob) => resolve(URL.createObjectURL(blob)), 'image/png');
-    });
+// Chuyển đổi canvas thành chuỗi mã Base64 để lưu vĩnh viễn lên mây
+    const croppedImageUrl = canvas.toDataURL('image/jpeg', 0.8);
 
     // Cập nhật formData dựa trên đích đến của ảnh (event hay profile)
     if (cropTarget === 'event') {
