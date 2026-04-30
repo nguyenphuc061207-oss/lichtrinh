@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import React, { useState, useEffect } from 'react';
+import GameRoadmap from './GameRoadmap';
 import Login from './Login';
-import { auth } from './firebase'; // Kết nối với file firebase.js bạn vừa tạo
+import { auth } from './firebase'; 
 import { onAuthStateChanged } from "firebase/auth";
 
 function App() {
@@ -9,39 +9,39 @@ function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Bản chất: Firebase sẽ lắng nghe xem trong trình duyệt đã lưu "chìa khóa" đăng nhập chưa
+    console.log("Hệ thống đang kiểm tra kết nối Firebase...");
+    
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      console.log("Trạng thái người dùng:", currentUser);
       setUser(currentUser);
       setLoading(false);
+    }, (error) => {
+      console.error("Lỗi Firebase Auth:", error);
+      setLoading(false);
     });
-    // Hủy lắng nghe khi component bị gỡ bỏ
+
     return () => unsubscribe();
   }, []);
 
-  // Màn hình chờ trong lúc Firebase đang kiểm tra danh tính
   if (loading) {
     return (
       <div className="bg-[#0f172a] min-h-screen flex flex-col items-center justify-center">
         <div className="w-16 h-16 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-        <p className="text-cyan-400 font-black tracking-widest animate-pulse">ĐANG KHỞI TẠO HỆ THỐNG...</p>
+        <p className="text-cyan-400 font-black tracking-widest animate-pulse">HỆ THỐNG ĐANG PHÂN TÍCH DỮ LIỆU...</p>
       </div>
     );
   }
 
   return (
     <div>
-      {/* 
-          Cơ chế Logic:
-          - Nếu biến user có dữ liệu (đã đăng nhập) -> Hiện GameRoadmap và truyền thông tin user vào
-          - Nếu user là null (chưa đăng nhập) -> Hiện màn hình Login
-      */}
-      {user ? (
-        <GameRoadmap user={user} />
-      ) : (
-        <Login onLoginSuccess={() => {}} />
-      )}
+      {user ? <GameRoadmap user={user} /> : <Login onLoginSuccess={() => {}} />}
     </div>
   );
 }
 
 export default App;
+```[cite: 1]
+
+### Bước cuối cùng:
+1. Đảm bảo file **`firebase.js`** đã có lệnh `export const auth = getAuth(app);` ở cuối[cite: 1].
+2. Chạy lại: `git add .` -> `git commit -m "Fix login logic"` -> `git push`[cite: 1, 2].
