@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { auth } from './firebase';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithRedirect } from 'firebase/auth';
 
 const Login = () => {
   const [isRegister, setIsRegister] = useState(false);
@@ -22,11 +22,12 @@ const Login = () => {
     }
   };
 
-  const handleGoogleLogin = async () => {
+ const handleGoogleLogin = async () => {
     setError('');
     const provider = new GoogleAuthProvider();
     try {
-      await signInWithPopup(auth, provider);
+      // Đổi từ Popup sang Redirect để không bị chặn trên Mobile
+      await signInWithRedirect(auth, provider);
     } catch (err) {
       setError(err.message.replace("Firebase: ", ""));
     }
