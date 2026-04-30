@@ -58,6 +58,10 @@ const GameRoadmap = ({ user }) => {
   // ==========================================
   // 2. STATE DỮ LIỆU CỐT LÕI VÀ ĐỒNG BỘ FIRESTORE
   // ==========================================
+  
+  // Quản lý trạng thái hiển thị giao diện trên Mobile
+  const [showMobileMap, setShowMobileMap] = useState(false);
+
   // Khởi tạo state với dữ liệu mặc định ban đầu
   const [profile, setProfile] = useState({
     avatar: "https://images.unsplash.com/photo-1541562232579-512a21360020?q=80&w=800",
@@ -291,17 +295,38 @@ const GameRoadmap = ({ user }) => {
         </div>
 
         {/* NỘI DUNG CHÍNH (CỘT AVATAR VÀ DÒNG THỜI GIAN) */}
-        <div className="flex flex-col md:flex-row flex-1 overflow-hidden bg-[#e0e7ff] p-2 gap-2">
+        <div className="flex flex-col md:flex-row flex-1 overflow-hidden bg-[#e0e7ff] p-2 gap-2 relative">
           
-          {/* CỘT TRÁI (AVATAR) */}
-          <div className="w-full md:w-[320px] h-[160px] md:h-full shrink-0 bg-white rounded-lg border-2 border-[#bfdbfe] relative flex flex-col justify-between z-20 shadow-sm p-2 md:p-3">
-            <div className="w-full h-full relative rounded-md border-[3px] border-[#60a5fa] overflow-hidden shadow-[0_0_15px_rgba(96,165,250,0.3)] bg-slate-100">
-              <img src={profile.avatar} alt="Avatar" className="w-full h-full object-cover object-top md:object-center" />
+          {/* CỘT TRÁI (AVATAR) - LÀM MÀN HÌNH CHỜ TRÊN MOBILE */}
+          <div className={`w-full h-full md:w-[320px] md:h-full shrink-0 bg-white rounded-lg border-2 border-[#bfdbfe] relative flex-col justify-between z-20 shadow-sm p-2 md:p-3 ${showMobileMap ? 'hidden md:flex' : 'flex'}`}>
+            <div className="w-full h-full relative rounded-md border-[3px] border-[#60a5fa] overflow-hidden shadow-[0_0_15px_rgba(96,165,250,0.3)] bg-slate-900">
+              <img src={profile.avatar} alt="Avatar" className="w-full h-full object-cover object-center opacity-80 md:opacity-100" />
+              
+              {/* NÚT BẤM VÀ LỚP PHỦ CHỈ HIỆN TRÊN MOBILE */}
+              <div className="absolute inset-0 flex md:hidden flex-col items-center justify-center p-4 bg-gradient-to-t from-black/80 via-black/30 to-transparent">
+                 <button
+                    onClick={() => setShowMobileMap(true)}
+                    className="bg-cyan-500 hover:bg-cyan-400 text-[#0f172a] font-black px-8 py-4 rounded-full border-2 border-white shadow-[0_0_30px_rgba(6,182,212,0.8)] animate-pulse text-lg tracking-wider mt-32"
+                 >
+                    XEM LỊCH TRÌNH
+                 </button>
+              </div>
             </div>
           </div>
 
           {/* CỘT PHẢI (ROADMAP CUỘN NGANG) */}
-          <div className="flex-1 flex flex-col overflow-x-auto relative custom-scrollbar bg-white rounded-lg border-2 border-[#bfdbfe] shadow-inner" ref={scrollContainerRef}>
+          <div className={`flex-1 flex-col overflow-x-auto relative custom-scrollbar bg-white rounded-lg border-2 border-[#bfdbfe] shadow-inner ${showMobileMap ? 'flex' : 'hidden md:flex'}`} ref={scrollContainerRef}>
+            
+            {/* NÚT QUAY LẠI ẢNH NỀN (CHỈ TRÊN MOBILE) */}
+            <div className="md:hidden sticky left-0 top-0 z-50 w-full bg-white border-b-2 border-slate-200 p-2 shadow-sm flex justify-center">
+               <button
+                 onClick={() => setShowMobileMap(false)}
+                 className="bg-slate-700 text-white px-6 py-2 rounded-full font-bold text-xs shadow-md hover:bg-slate-600 uppercase tracking-widest flex items-center gap-2"
+               >
+                 <span>⬅</span> QUAY LẠI HÌNH NỀN
+               </button>
+            </div>
+
             <div className="min-w-[22000px] flex flex-col h-full relative">
               
               <div className="sticky top-0 z-40 bg-white shadow-sm border-b-2 border-[#e2e8f0]">
