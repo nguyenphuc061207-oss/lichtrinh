@@ -1,34 +1,26 @@
 import React, { useState } from 'react';
 import { auth } from './firebase';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signInAnonymously } from 'firebase/auth';
 
 const Login = () => {
-  const [isRegister, setIsRegister] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
 
-  const handleAuth = async (e) => {
+  const handleGoogleLogin = async (e) => {
     e.preventDefault();
     setError('');
+    const provider = new GoogleAuthProvider();
     try {
-      if (isRegister) {
-        await createUserWithEmailAndPassword(auth, email, password);
-      } else {
-        await signInWithEmailAndPassword(auth, email, password);
-      }
+      await signInWithPopup(auth, provider);
     } catch (err) {
       setError(err.message.replace("Firebase: ", ""));
     }
   };
 
-  const handleGoogleLogin = async (e) => {
-    e.preventDefault(); // Ngăn nút bấm làm tải lại trang
+  const handleGuestLogin = async (e) => {
+    e.preventDefault();
     setError('');
-    const provider = new GoogleAuthProvider();
     try {
-      // Dùng Popup vì tên miền đã được thêm vào danh sách hợp lệ
-      await signInWithPopup(auth, provider);
+      await signInAnonymously(auth);
     } catch (err) {
       setError(err.message.replace("Firebase: ", ""));
     }
@@ -42,65 +34,49 @@ const Login = () => {
         <div className="absolute -top-10 -right-10 w-32 h-32 bg-cyan-500 rounded-full blur-[60px] opacity-20"></div>
         <div className="absolute -bottom-10 -left-10 w-32 h-32 bg-blue-600 rounded-full blur-[60px] opacity-20"></div>
 
-        <div className="text-center mb-8 relative z-10">
+        <div className="text-center mb-10 relative z-10">
           <h2 className="text-3xl font-black text-white tracking-widest drop-shadow-md">
-            {isRegister ? 'TẠO HÀNH TRÌNH' : 'KHỞI TẠO'}
+            KHỞI TẠO
           </h2>
           <p className="text-cyan-400 font-bold text-sm mt-1 uppercase tracking-wider">Hệ thống Lịch Trình</p>
         </div>
 
-        <form onSubmit={handleAuth} className="space-y-4 relative z-10">
-          <div>
-            <input 
-              type="email" 
-              required
-              placeholder="Email liên kết"
-              className="w-full bg-[#0f172a] text-white border border-slate-600 rounded-lg p-3 text-sm focus:outline-none focus:border-cyan-400 transition-colors" 
-              value={email} 
-              onChange={(e) => setEmail(e.target.value)} 
-            />
-          </div>
-          <div>
-            <input 
-              type="password" 
-              required
-              placeholder="Mật mã an ninh"
-              className="w-full bg-[#0f172a] text-white border border-slate-600 rounded-lg p-3 text-sm focus:outline-none focus:border-cyan-400 transition-colors" 
-              value={password} 
-              onChange={(e) => setPassword(e.target.value)} 
-            />
-          </div>
-
-          {error && <p className="text-red-400 text-xs font-bold text-center italic">{error}</p>}
-
+        <div className="space-y-4 relative z-10">
+          
           <button 
-            type="submit" 
-            className="w-full bg-cyan-500 hover:bg-cyan-400 text-[#0f172a] font-black p-3 rounded-lg uppercase tracking-widest transition-all shadow-[0_0_15px_rgba(6,182,212,0.4)]"
+            type="button" 
+            onClick={handleGoogleLogin}
+            className="w-full bg-white hover:bg-slate-100 text-slate-800 font-bold p-3.5 rounded-lg flex items-center justify-center gap-3 transition-colors shadow-sm"
           >
-            {isRegister ? 'Đăng Ký Ngay' : 'Truy Cập Mật'}
+            <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-6 h-6" />
+            ĐĂNG NHẬP BẰNG GOOGLE
           </button>
-        </form>
 
-        <div className="relative flex py-5 items-center z-10">
+          <div className="relative flex py-2 items-center z-10">
             <div className="flex-grow border-t border-slate-600"></div>
             <span className="flex-shrink-0 mx-4 text-slate-400 text-xs font-bold uppercase">Hoặc</span>
             <div className="flex-grow border-t border-slate-600"></div>
+          </div>
+
+          <button 
+            type="button" 
+            onClick={handleGuestLogin}
+            className="w-full bg-slate-700 hover:bg-slate-600 text-white font-black p-3.5 rounded-lg flex items-center justify-center gap-3 uppercase tracking-widest transition-all shadow-[0_0_15px_rgba(0,0,0,0.4)] border border-slate-600"
+          >
+            <span className="text-xl">🕵️</span>
+            TRUY CẬP TÀI KHOẢN KHÁCH
+          </button>
+
+          {error && (
+            <p className="text-red-400 text-xs font-bold text-center italic mt-4 bg-red-900/30 p-2 rounded">
+              Lỗi: {error}
+            </p>
+          )}
+
         </div>
 
-        <button 
-          type="button" 
-          onClick={handleGoogleLogin}
-          className="relative z-10 w-full bg-white hover:bg-slate-100 text-slate-800 font-bold p-3 rounded-lg flex items-center justify-center gap-3 transition-colors shadow-sm"
-        >
-          <img src="https://www.svgrepo.com/show/475656/google-color.svg" alt="Google" className="w-5 h-5" />
-          ĐĂNG NHẬP BẰNG GOOGLE
-        </button>
-
-        <p className="text-center text-slate-400 text-xs mt-6 relative z-10 font-bold">
-          {isRegister ? 'Đã có quyền truy cập? ' : 'Chưa có tài khoản? '}
-          <button onClick={() => setIsRegister(!isRegister)} className="text-cyan-400 hover:text-cyan-300 underline underline-offset-2">
-            {isRegister ? 'Đăng nhập' : 'Đăng ký'}
-          </button>
+        <p className="text-center text-slate-400 text-[10px] mt-8 relative z-10 font-bold px-4">
+          Tài khoản khách sẽ bị mất dữ liệu nếu bạn xóa bộ nhớ trình duyệt hoặc đổi thiết bị.
         </p>
       </div>
     </div>
