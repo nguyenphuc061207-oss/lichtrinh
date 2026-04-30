@@ -61,6 +61,9 @@ const GameRoadmap = ({ user }) => {
   
   // Quản lý trạng thái hiển thị giao diện trên Mobile
   const [showMobileMap, setShowMobileMap] = useState(false);
+  
+  // Quản lý bảng chi tiết sự kiện
+  const [selectedEventDetail, setSelectedEventDetail] = useState(null); 
 
   // Khởi tạo state với dữ liệu mặc định ban đầu
   const [profile, setProfile] = useState({
@@ -173,7 +176,7 @@ const GameRoadmap = ({ user }) => {
       0, 0, completedCrop.width, completedCrop.height
     );
 
-// Chuyển đổi canvas thành chuỗi mã Base64 để lưu vĩnh viễn lên mây
+    // Chuyển đổi canvas thành chuỗi mã Base64 để lưu vĩnh viễn lên mây
     const croppedImageUrl = canvas.toDataURL('image/jpeg', 0.8);
 
     // Cập nhật formData dựa trên đích đến của ảnh (event hay profile)
@@ -375,7 +378,12 @@ const GameRoadmap = ({ user }) => {
                     const topPosition = event.trackRow * 80;
 
                     return (
-                      <div key={event.id} className="absolute h-[64px] bg-white border-2 border-[#cbd5e1] rounded-lg shadow-sm flex items-center pr-1 md:pr-2 z-20" style={{ left: `${leftPercent}%`, width: `${widthPercent}%`, top: `${topPosition}px` }}>
+                      <div 
+                        key={event.id} 
+                        onClick={() => setSelectedEventDetail(event)} 
+                        className="absolute h-[64px] bg-white border-2 border-[#cbd5e1] rounded-lg shadow-sm flex items-center pr-1 md:pr-2 z-20 cursor-pointer hover:shadow-md hover:border-[#3b82f6] transition-all" 
+                        style={{ left: `${leftPercent}%`, width: `${widthPercent}%`, top: `${topPosition}px` }}
+                      >
                         
                         <div className="absolute left-[-6px] md:left-[-8px] top-1/2 -translate-y-1/2 w-3 md:w-3.5 h-3 md:h-3.5 bg-white border-[2px] md:border-[3px] border-[#3b82f6] rounded-full z-10 shadow-sm"></div>
 
@@ -500,6 +508,63 @@ const GameRoadmap = ({ user }) => {
           <div className="flex gap-3 md:gap-6 mt-6 md:mt-8 w-full max-w-[400px] md:max-w-[500px] px-4">
             <button onClick={() => { setIsCropModalOpen(false); setUpImg(null); }} className="flex-1 py-2 md:py-3 bg-slate-700 text-white font-bold rounded hover:bg-slate-600 transition-colors text-xs md:text-base">HỦY</button>
             <button onClick={handleCropComplete} className="flex-1 py-2 md:py-3 bg-cyan-500 text-[#0f172a] font-black rounded hover:bg-cyan-400 transition-colors shadow-[0_0_15px_rgba(6,182,212,0.5)] text-xs md:text-base">XÁC NHẬN</button>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================== */}
+      {/* MODAL XEM CHI TIẾT SỰ KIỆN (KHI BẤM VÀO THẺ) */}
+      {/* ========================================== */}
+      {selectedEventDetail && (
+        <div 
+          className="fixed inset-0 bg-black/80 flex items-center justify-center z-[110] p-4 backdrop-blur-sm" 
+          onClick={() => setSelectedEventDetail(null)} // Bấm ra ngoài bóng đen để đóng
+        >
+          <div 
+            className="bg-[#1e293b] border-2 border-cyan-500 rounded-xl w-full max-w-[400px] overflow-hidden shadow-[0_0_30px_rgba(6,182,212,0.5)] animate-[fadeIn_0.2s_ease-out]" 
+            onClick={e => e.stopPropagation()} // Ngăn chặn sự kiện click lan ra ngoài
+          >
+            {/* Phần ảnh bìa */}
+            <div className="w-full h-40 md:h-48 bg-slate-800 relative">
+              <img src={selectedEventDetail.image} alt="Event Cover" className="w-full h-full object-cover" />
+              <button 
+                onClick={() => setSelectedEventDetail(null)} 
+                className="absolute top-2 right-2 w-8 h-8 bg-black/60 hover:bg-red-500 text-white rounded-full flex items-center justify-center font-bold backdrop-blur-sm transition-colors text-sm"
+              >
+                ✕
+              </button>
+            </div>
+            
+            {/* Phần thông tin chi tiết */}
+            <div className="p-5 md:p-6">
+              <h3 className="text-white font-black text-lg md:text-xl mb-3 leading-tight break-words border-b border-slate-700 pb-3">
+                {selectedEventDetail.title}
+              </h3>
+              
+              <div className="space-y-3">
+                <div className="flex items-start gap-3">
+                  <span className="text-xl md:text-2xl mt-0.5">🕒</span>
+                  <div>
+                    <p className="text-slate-400 text-[10px] font-bold uppercase mb-0.5">Thời gian diễn ra</p>
+                    <p className="text-cyan-400 font-bold text-sm bg-cyan-900/30 px-3 py-1.5 rounded-md border border-cyan-500/30 w-fit">
+                      {selectedEventDetail.dateStr}
+                    </p>
+                  </div>
+                </div>
+
+                {selectedEventDetail.rewards && (
+                  <div className="flex items-start gap-3">
+                    <span className="text-xl md:text-2xl mt-0.5">💎</span>
+                    <div>
+                      <p className="text-slate-400 text-[10px] font-bold uppercase mb-0.5">Phần thưởng / Ghi chú</p>
+                      <p className="text-yellow-400 font-bold text-sm bg-yellow-900/30 px-3 py-1.5 rounded-md border border-yellow-500/30 w-fit break-words">
+                        {selectedEventDetail.rewards}
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
