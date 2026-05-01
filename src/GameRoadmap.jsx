@@ -320,7 +320,8 @@ const GameRoadmap = ({ user }) => {
                </button>
             </div>
 
-            <div className="min-w-[22000px] flex flex-col h-full relative">
+            {/* ĐÂY LÀ CHỖ TÍNH CHIỀU RỘNG TỰ ĐỘNG: Mỗi ngày = 100px */}
+            <div className="flex flex-col h-full relative" style={{ minWidth: `${totalDays * 100}px` }}>
               
               <div className="sticky top-0 z-40 bg-white shadow-sm border-b-2 border-[#e2e8f0]">
                 <div className="bg-[#1e40af] h-4 md:h-5 flex text-white/70 font-bold text-[8px] md:text-[9px] tracking-widest uppercase">
@@ -339,7 +340,8 @@ const GameRoadmap = ({ user }) => {
 
                 <div className="h-6 md:h-8 flex relative bg-white">
                   {daysArray.map((date, idx) => {
-                    if (idx % 5 === 0 || idx === totalDays) {
+                    // Hiển thị mốc ngày mỗi 2 ngày để thanh kéo dài không bị trống trải
+                    if (idx % 2 === 0 || idx === totalDays) {
                       return (
                         <div key={idx} className="absolute top-0 flex flex-col items-center justify-start pt-0.5 md:pt-1" style={{ left: `${(idx / totalDays) * 100}%`, transform: 'translateX(-50%)' }}>
                           <span className="text-[#1e40af] font-black text-[9px] md:text-[11px] leading-none">{date.getDate()}</span>
@@ -383,9 +385,10 @@ const GameRoadmap = ({ user }) => {
                           <img src={event.image} alt="event" className="w-full h-full object-cover" />
                         </div>
 
-                        <div className="flex-1 min-w-0 py-1">
-                          <h4 className="font-bold text-[#1e3a8a] text-[11px] md:text-[13px] truncate">{event.title}</h4>
-                          <div className="text-[9px] md:text-[11px] text-slate-500 font-bold flex items-center gap-1 mt-1 bg-slate-100 w-fit px-1.5 md:px-2 py-0.5 rounded-full">
+                        <div className="flex-1 min-w-0 py-1 flex flex-col justify-center h-full">
+                          {/* Đã xóa lệnh truncate, thêm line-clamp-2 để chữ tự rớt xuống dòng */}
+                          <h4 className="font-bold text-[#1e3a8a] text-[11px] md:text-[13px] line-clamp-2 leading-tight break-words" title={event.title}>{event.title}</h4>
+                          <div className="text-[9px] md:text-[11px] text-slate-500 font-bold flex items-center gap-1 mt-1 bg-slate-100 w-fit px-1.5 md:px-2 py-0.5 rounded-full shrink-0">
                              <span className="text-[#d97706]">🕒</span> {event.dateStr}
                           </div>
                         </div>
@@ -409,7 +412,7 @@ const GameRoadmap = ({ user }) => {
 
       </div>
 
- {/* ========================================== */}
+      {/* ========================================== */}
       {/* MODAL SỰ KIỆN SẮP HẾT HẠN (DEADLINE <= 3 NGÀY) */}
       {/* ========================================== */}
       {isDeadlineModalOpen && (
