@@ -6,20 +6,20 @@ import { doc, setDoc, getDoc, onSnapshot, collection, query, where, getDocs } fr
 import { signOut } from "firebase/auth";
 
 // ============================================================
-// CẤU HÌNH DANH MỤC & MÀU SẮC (GIỮ NGUYÊN MÀU ĐỂ NHẬN DIỆN)
+// CẤU HÌNH DANH MỤC & MÀU SẮC (ĐÃ TÁCH ICON ĐỂ KHÔNG BỊ LỖI CHỮ)
 // ============================================================
 const CATEGORIES = [
-  { id: 'study',   label: '📚 Học tập',   color: '#3b82f6', bg: '#eff6ff', border: '#bfdbfe', text: '#1d4ed8' },
-  { id: 'work',    label: '💼 Công việc',  color: '#8b5cf6', bg: '#f5f3ff', border: '#ddd6fe', text: '#6d28d9' },
-  { id: 'goal',    label: '🎯 Mục tiêu',   color: '#10b981', bg: '#ecfdf5', border: '#a7f3d0', text: '#065f46' },
-  { id: 'event',   label: '🎉 Sự kiện',   color: '#f59e0b', bg: '#fffbeb', border: '#fde68a', text: '#92400e' },
-  { id: 'health',  label: '💪 Sức khoẻ',  color: '#ef4444', bg: '#fef2f2', border: '#fecaca', text: '#991b1b' },
-  { id: 'other',   label: '✨ Khác',       color: '#ec4899', bg: '#fdf2f8', border: '#fbcfe8', text: '#be185d' }, // Đổi Khác sang tông hồng
+  { id: 'study',   icon: '📚', label: 'Học tập',   color: '#3b82f6', bg: '#eff6ff', border: '#bfdbfe', text: '#1d4ed8' },
+  { id: 'work',    icon: '💼', label: 'Công việc', color: '#8b5cf6', bg: '#f5f3ff', border: '#ddd6fe', text: '#6d28d9' },
+  { id: 'goal',    icon: '🎯', label: 'Mục tiêu',  color: '#10b981', bg: '#ecfdf5', border: '#a7f3d0', text: '#065f46' },
+  { id: 'event',   icon: '🎉', label: 'Sự kiện',   color: '#f59e0b', bg: '#fffbeb', border: '#fde68a', text: '#92400e' },
+  { id: 'health',  icon: '💪', label: 'Sức khoẻ',  color: '#ef4444', bg: '#fef2f2', border: '#fecaca', text: '#991b1b' },
+  { id: 'other',   icon: '✨', label: 'Khác',      color: '#ec4899', bg: '#fdf2f8', border: '#fbcfe8', text: '#be185d' },
 ];
 
 const STATUSES = [
-  { id: 'todo',        label: 'Chưa bắt đầu', icon: '⬜', accent: '#94a3b8' },
-  { id: 'in-progress', label: 'Đang thực hiện', icon: '🌸', accent: '#ec4899' }, // Icon hoa anh đào
+  { id: 'todo',        label: 'Chưa bắt đầu',  icon: '⬜', accent: '#94a3b8' },
+  { id: 'in-progress', label: 'Đang thực hiện', icon: '⏳', accent: '#ec4899' }, 
   { id: 'done',        label: 'Hoàn thành',    icon: '✅', accent: '#10b981' },
 ];
 
@@ -88,9 +88,9 @@ const GameRoadmap = ({ user }) => {
   const [profile, setProfile] = useState({
     avatar:      "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200",
     background:  "https://images.unsplash.com/photo-1541562232579-512a21360020?q=80&w=800",
-    title:       "HÀNH TRÌNH PHÉP THUẬT",
+    title:       "TỔNG QUAN LỊCH TRÌNH",
     subtitle:    "v7.3",
-    displayName: "Nhà Khai Phá",
+    displayName: "Người dùng mới",
     shortId:     "........",
     bio:         "",
   });
@@ -110,7 +110,7 @@ const GameRoadmap = ({ user }) => {
         let loadedProfile = data.profile ? { ...data.profile } : { ...profile };
         let needsSave = false;
         if (!loadedProfile.shortId || loadedProfile.shortId === "........") { loadedProfile.shortId = generateID(); needsSave = true; }
-        if (!loadedProfile.displayName) { loadedProfile.displayName = "Nhà Khai Phá"; needsSave = true; }
+        if (!loadedProfile.displayName) { loadedProfile.displayName = "Người dùng mới"; needsSave = true; }
         if (!loadedProfile.background)  { loadedProfile.background  = loadedProfile.avatar || profile.background; needsSave = true; }
         setProfile(loadedProfile);
         if (needsSave) setDoc(doc(db, "users", user.uid), { profile: loadedProfile }, { merge: true });
@@ -225,8 +225,8 @@ const GameRoadmap = ({ user }) => {
         const imgTypes = item.types.filter(t => t.startsWith('image/'));
         if (imgTypes.length > 0) { processImageBlob(await item.getType(imgTypes[0]), target); return; }
       }
-      alert('Không tìm thấy ảnh trong Clipboard!');
-    } catch { alert('Trình duyệt chặn Clipboard. Dán bằng Ctrl+V nhé!'); }
+      alert('Không tìm thấy ảnh trong thiết bị nhớ tạm (Clipboard)!');
+    } catch { alert('Trình duyệt chặn Clipboard. Vui lòng sử dụng phím tắt Ctrl+V!'); }
   };
 
   useEffect(() => {
@@ -277,7 +277,7 @@ const GameRoadmap = ({ user }) => {
       bio:         profileFormData.bio || '',
     };
     setProfile(upd); saveToCloud(upd, events);
-    alert("✨ Cấu hình đã được lưu lấp lánh!");
+    alert("Cấu hình đã được lưu thành công.");
   };
 
   const handleAddEvent = (e) => {
@@ -337,15 +337,15 @@ const GameRoadmap = ({ user }) => {
 
   const handleAddFriend = async (e) => {
     e.preventDefault();
-    if (searchFriendId === profile.shortId) { alert("Ơ kìa, không thể tự kết bạn với chính mình đâu!"); return; }
-    if (friendsList.includes(searchFriendId)) { alert("Người này đã là bạn bè rồi nè!"); return; }
+    if (searchFriendId === profile.shortId) { alert("Bạn không thể tự kết bạn với chính mình!"); return; }
+    if (friendsList.includes(searchFriendId)) { alert("Người này đã có trong danh sách bạn bè!"); return; }
     const q = query(collection(db, "users"), where("profile.shortId", "==", searchFriendId));
     const snap = await getDocs(q);
-    if (snap.empty) { alert("Không tìm thấy người dùng này!"); return; }
+    if (snap.empty) { alert("Không tìm thấy người dùng này trên hệ thống!"); return; }
     let foundUid = ""; snap.forEach(d => { foundUid = d.id; });
     const newList = [...friendsList, foundUid];
     setFriendsList(newList); saveToCloud(profile, events, newList); setSearchFriendId('');
-    alert("🌸 Kết bạn thành công!");
+    alert("✅ Kết bạn thành công!");
   };
 
   const handleViewFriendFeed = async (friendUid) => {
@@ -381,7 +381,7 @@ const GameRoadmap = ({ user }) => {
     <div className="min-h-screen flex items-center justify-center bg-pink-50">
       <div className="text-center">
         <div className="w-16 h-16 border-4 border-pink-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-        <p className="text-pink-600 font-bold text-sm tracking-widest uppercase">Đang triệu hồi phép thuật...</p>
+        <p className="text-pink-600 font-bold text-sm tracking-widest uppercase">Đang tải dữ liệu...</p>
       </div>
     </div>
   );
@@ -413,13 +413,13 @@ const GameRoadmap = ({ user }) => {
               <div className="h-6 w-px bg-pink-200"></div>
               <div className="flex gap-2 text-[11px] font-bold ml-2">
                 <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 shadow-sm border border-emerald-200">
-                  ✅ {stats.done} xong
+                  ✅ {stats.done} Xong
                 </span>
                 <span className="px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 shadow-sm border border-blue-200">
-                  🌸 {stats.inProg} đang làm
+                  ⏳ {stats.inProg} Đang làm
                 </span>
                 <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 shadow-sm border border-slate-200">
-                  📅 {stats.upcoming} sắp tới
+                  📅 {stats.upcoming} Sắp tới
                 </span>
               </div>
             </div>
@@ -476,7 +476,7 @@ const GameRoadmap = ({ user }) => {
               <div className="md:hidden absolute inset-0 flex items-center justify-center bg-white/40 backdrop-blur-sm">
                 <button onClick={() => setShowMobileMap(true)}
                   className="bg-pink-500 text-white font-black px-6 py-3 rounded-full text-sm shadow-[0_4px_15px_rgba(236,72,153,0.4)] border-2 border-white hover:scale-105 transition-transform">
-                  XEM LỊCH TRÌNH 🌸
+                  XEM LỊCH TRÌNH 
                 </button>
               </div>
             </div>
@@ -485,9 +485,9 @@ const GameRoadmap = ({ user }) => {
             <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar pr-1">
               <div className="grid grid-cols-2 gap-2">
                 {[
-                  { label: 'Tổng',      val: stats.total,    color: '#6366f1', bg: '#e0e7ff',   icon: '📋' },
+                  { label: 'Tổng số',      val: stats.total,    color: '#6366f1', bg: '#e0e7ff',   icon: '📋' },
                   { label: 'Hoàn thành', val: stats.done,    color: '#10b981', bg: '#d1fae5',  icon: '✅' },
-                  { label: 'Đang làm',  val: stats.inProg,   color: '#3b82f6', bg: '#dbeafe',  icon: '🌸' },
+                  { label: 'Đang làm',  val: stats.inProg,   color: '#3b82f6', bg: '#dbeafe',  icon: '⏳' },
                   { label: 'Sắp tới',   val: stats.upcoming, color: '#f59e0b', bg: '#fef3c7',  icon: '📅' },
                 ].map(s => (
                   <div key={s.label} className="p-3 rounded-2xl text-center bg-white shadow-sm"
@@ -501,28 +501,28 @@ const GameRoadmap = ({ user }) => {
 
               {/* Category Breakdown */}
               <div className="rounded-2xl p-4 bg-white shadow-sm border border-slate-100">
-                <div className="text-[11px] font-black text-pink-400 uppercase tracking-widest mb-3 flex items-center gap-1"><span>✨</span> Phân loại</div>
+                <div className="text-[11px] font-black text-pink-400 uppercase tracking-widest mb-3 flex items-center gap-1"><span>📑</span> Phân loại</div>
                 <div className="space-y-2">
                   {stats.catBreakdown.filter(c => c.count > 0).map(cat => (
                     <div key={cat.id} className="flex items-center gap-2.5">
-                      <div className="w-2.5 h-2.5 rounded-full shrink-0 shadow-sm" style={{ background: cat.color }}></div>
+                      <div className="text-sm shrink-0">{cat.icon}</div>
                       <div className="text-[12px] font-bold text-slate-600 flex-1 truncate">{cat.label}</div>
                       <div className="text-[12px] font-black bg-slate-50 px-2 py-0.5 rounded-md" style={{ color: cat.color }}>{cat.count}</div>
                     </div>
                   ))}
                   {stats.catBreakdown.every(c => c.count === 0) && (
-                    <div className="text-[12px] text-slate-400 italic font-medium">Chưa có phép màu nào được tạo!</div>
+                    <div className="text-[12px] text-slate-400 italic font-medium">Chưa có dữ liệu phân loại.</div>
                   )}
                 </div>
               </div>
 
               {/* Upcoming this week */}
               <div className="rounded-2xl p-4 bg-white shadow-sm border border-slate-100">
-                <div className="text-[11px] font-black text-indigo-400 uppercase tracking-widest mb-3 flex items-center gap-1"><span>🌟</span> Tuần này</div>
+                <div className="text-[11px] font-black text-indigo-400 uppercase tracking-widest mb-3 flex items-center gap-1"><span>📆</span> Tuần này</div>
                 {(() => {
                   const weekEnd = new Date(now.getTime() + 7 * 86400000);
                   const thisWeek = events.filter(e => e.end >= now && e.start <= weekEnd).sort((a, b) => a.end - b.end).slice(0, 3);
-                  if (thisWeek.length === 0) return <div className="text-[12px] text-slate-400 italic font-medium">Rảnh rỗi chill thôi! ☕</div>;
+                  if (thisWeek.length === 0) return <div className="text-[12px] text-slate-400 italic font-medium">Chưa có lịch trình trong tuần.</div>;
                   return thisWeek.map(ev => {
                     const cat = getCat(ev.category);
                     return (
@@ -570,14 +570,14 @@ const GameRoadmap = ({ user }) => {
                   <button key={cat.id} onClick={() => setFilterCat(cat.id === filterCat ? 'all' : cat.id)}
                     className="shrink-0 text-[11px] font-black px-3 py-1.5 rounded-xl transition-all shadow-sm"
                     style={{ background: filterCat === cat.id ? cat.bg : '#ffffff', color: filterCat === cat.id ? cat.text : '#64748b', border: `1px solid ${filterCat === cat.id ? cat.border : '#e2e8f0'}` }}>
-                    {cat.label.split(' ')[0]}
+                    {cat.icon} {cat.label}
                   </button>
                 ))}
               </div>
 
               {/* Status Filter */}
               <div className="flex gap-1.5">
-                {[{ id: 'all', label: '⭐ All' }, ...STATUSES.map(s => ({ id: s.id, label: s.icon + ' ' + s.label.split(' ')[0] }))].map(s => (
+                {[{ id: 'all', label: '⭐ Tất cả' }, ...STATUSES.map(s => ({ id: s.id, label: s.icon + ' ' + s.label }))].map(s => (
                   <button key={s.id} onClick={() => setFilterStat(s.id === filterStat ? 'all' : s.id)}
                     className="shrink-0 text-[11px] font-black px-3 py-1.5 rounded-xl transition-all shadow-sm"
                     style={{ background: filterStat === s.id ? '#e0e7ff' : '#ffffff', color: filterStat === s.id ? '#4f46e5' : '#64748b', border: `1px solid ${filterStat === s.id ? '#c7d2fe' : '#e2e8f0'}` }}>
@@ -616,7 +616,7 @@ const GameRoadmap = ({ user }) => {
                   <div className="h-8 flex text-[12px] font-black bg-indigo-50 text-indigo-600 border-b border-indigo-100">
                     {monthsData.map((m, i) => (
                       <div key={i} className="flex items-center justify-center border-r border-indigo-100" style={{ width: `${(m.count / totalDays) * 100}%` }}>
-                        ✨ THÁNG {m.month} ✨
+                        THÁNG {m.month}
                       </div>
                     ))}
                   </div>
@@ -653,9 +653,9 @@ const GameRoadmap = ({ user }) => {
                   {filteredEvents.length === 0 && (
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                       <div className="text-center bg-white/60 p-6 rounded-3xl backdrop-blur-sm border border-slate-100 shadow-sm">
-                        <div className="text-5xl mb-3">🌸</div>
+                        <div className="text-5xl mb-3">📅</div>
                         <div className="text-[14px] font-black text-slate-500">
-                          {events.length === 0 ? 'Bắt đầu hành trình phép thuật tại mục Cài Đặt nhé!' : 'Không tìm thấy kết quả phù hợp'}
+                          {events.length === 0 ? 'Hãy bắt đầu thêm sự kiện mới tại mục Cài Đặt!' : 'Không tìm thấy kết quả phù hợp'}
                         </div>
                       </div>
                     </div>
@@ -707,9 +707,9 @@ const GameRoadmap = ({ user }) => {
                             <div className="flex items-center gap-1.5 mb-1">
                               <span className="text-[10px]">{getPri(event.priority).icon}</span>
                               <span className="text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-wider" style={{ background: cat.bg, color: cat.text, border: `1px solid ${cat.border}` }}>
-                                {cat.label.split(' ')[1]}
+                                {cat.label}
                               </span>
-                              {isUrgent && <span className="text-[9px] px-2 py-0.5 rounded-full font-black animate-pulse bg-red-100 text-red-600 border border-red-200">🔥 {daysLeft === 0 ? 'Hôm nay!' : `${daysLeft}ngày`}</span>}
+                              {isUrgent && <span className="text-[9px] px-2 py-0.5 rounded-full font-black animate-pulse bg-red-100 text-red-600 border border-red-200">🔥 {daysLeft === 0 ? 'Hôm nay!' : `Còn ${daysLeft} ngày`}</span>}
                               {event.isShared && <span className="text-[9px] px-1.5 py-0.5 rounded-full font-black bg-pink-100 text-pink-500 border border-pink-200">📢</span>}
                             </div>
                             <h4 className="font-black text-[13px] truncate text-slate-800" style={{ textDecoration: event.status === 'done' ? 'line-through' : 'none', color: event.status === 'done' ? '#94a3b8' : '#1e293b' }}>
@@ -758,9 +758,9 @@ const GameRoadmap = ({ user }) => {
             <div className="h-16 flex items-center justify-between px-6 shrink-0 bg-pink-50 border-b border-pink-100">
               <div className="flex gap-2">
                 {[
-                  { id: 'profile', label: 'Tài Khoản',     icon: '🌸' },
+                  { id: 'profile', label: 'Tài Khoản',     icon: '⚙️' },
                   { id: 'events',  label: 'Quản Lý Lịch',  icon: '📅' },
-                  { id: 'friends', label: 'Bạn Bè',         icon: '💖' },
+                  { id: 'friends', label: 'Bạn Bè',         icon: '👥' },
                 ].map(tab => (
                   <button key={tab.id} onClick={() => setActiveTab(tab.id)}
                     className="px-5 py-2 rounded-xl text-[12px] font-black uppercase tracking-wide transition-all shadow-sm"
@@ -789,7 +789,7 @@ const GameRoadmap = ({ user }) => {
                     <div className="absolute inset-0 flex items-center gap-5 px-6">
                       <img src={profileFormData.avatar} alt="av" className="w-20 h-20 rounded-full object-cover border-4 border-white shadow-md bg-white" />
                       <div>
-                        <div className="font-black text-indigo-900 text-2xl drop-shadow-sm">{profileFormData.displayName || "Nhà Khai Phá"}</div>
+                        <div className="font-black text-indigo-900 text-2xl drop-shadow-sm">{profileFormData.displayName || "Người dùng mới"}</div>
                         <div className="text-[12px] font-black font-mono px-3 py-1 rounded-full mt-2 inline-block bg-pink-100 text-pink-600 border border-pink-200 shadow-sm">ID: {profile.shortId}</div>
                       </div>
                     </div>
@@ -797,9 +797,9 @@ const GameRoadmap = ({ user }) => {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     {[
-                      { key: 'displayName', label: 'Tên hiển thị', placeholder: 'Nhà Khai Phá' },
-                      { key: 'title',       label: 'Tiêu đề lớn',  placeholder: 'HÀNH TRÌNH PHÉP THUẬT' },
-                      { key: 'subtitle',    label: 'Tiêu đề phụ',  placeholder: 'v7.3' },
+                      { key: 'displayName', label: 'Tên hiển thị', placeholder: 'Nhập tên của bạn' },
+                      { key: 'title',       label: 'Tiêu đề lớn',  placeholder: 'TỔNG QUAN LỊCH TRÌNH' },
+                      { key: 'subtitle',    label: 'Tiêu đề phụ',  placeholder: 'Năm học mới' },
                       { key: 'bio',         label: 'Giới thiệu',   placeholder: 'Mô tả ngắn về bạn...' },
                     ].map(f => (
                       <div key={f.key}>
@@ -834,7 +834,7 @@ const GameRoadmap = ({ user }) => {
                   <div className="pt-6 mt-4 border-t-2 border-slate-100">
                     <button onClick={handleSaveProfile}
                       className="w-full py-4 rounded-2xl font-black uppercase text-sm tracking-wider transition-all hover:-translate-y-1 bg-gradient-to-r from-pink-400 to-indigo-400 text-white shadow-[0_10px_20px_rgba(236,72,153,0.3)]">
-                      ✨ LƯU CẤU HÌNH LẤP LÁNH ✨
+                      💾 LƯU CẤU HÌNH
                     </button>
                   </div>
                 </div>
@@ -846,7 +846,7 @@ const GameRoadmap = ({ user }) => {
                   {/* Events List */}
                   <div className="rounded-3xl p-4 space-y-2 max-h-[220px] overflow-y-auto custom-scrollbar bg-white border-2 border-slate-100 shadow-sm">
                     <div className="text-[11px] font-black uppercase mb-3 text-indigo-500 flex items-center gap-2"><span className="text-lg">📚</span> Danh sách hiện có ({events.length})</div>
-                    {events.length === 0 && <div className="text-[13px] italic text-slate-400 text-center py-4">Chưa có phép thuật nào được tạo ra.</div>}
+                    {events.length === 0 && <div className="text-[13px] italic text-slate-400 text-center py-4">Chưa có sự kiện nào được tạo!</div>}
                     {events.map(ev => {
                       const cat = getCat(ev.category);
                       return (
@@ -854,7 +854,7 @@ const GameRoadmap = ({ user }) => {
                           <div className="w-2 h-8 rounded-full" style={{ background: cat.color }}></div>
                           <span className="text-xl">{getStat(ev.status).icon}</span>
                           <span className="text-[13px] font-black flex-1 truncate text-slate-700">{ev.title}</span>
-                          <span className="text-[10px] font-bold px-2 py-1 rounded-lg" style={{ background: cat.bg, color: cat.text, border: `1px solid ${cat.border}` }}>{cat.label.split(' ')[0]}</span>
+                          <span className="text-[10px] font-bold px-2 py-1 rounded-lg" style={{ background: cat.bg, color: cat.text, border: `1px solid ${cat.border}` }}>{cat.label}</span>
                           {ev.isShared && <span className="text-[10px] bg-pink-100 text-pink-600 px-2 py-1 rounded-lg border border-pink-200 font-bold shrink-0">Công khai</span>}
                           <button onClick={() => handleDeleteEvent(ev.id)}
                             className="text-[10px] font-black px-3 py-1.5 rounded-lg transition-all hover:scale-105 bg-red-100 text-red-600 border border-red-200">Xóa</button>
@@ -865,7 +865,7 @@ const GameRoadmap = ({ user }) => {
 
                   {/* Add Event Form */}
                   <form onSubmit={handleAddEvent} className="space-y-4 bg-white p-5 rounded-3xl border-2 border-slate-100 shadow-sm">
-                    <div className="text-[13px] font-black uppercase text-pink-500 flex items-center gap-2 mb-2"><span className="text-xl">🪄</span> Thêm sự kiện mới</div>
+                    <div className="text-[13px] font-black uppercase text-pink-500 flex items-center gap-2 mb-2"><span className="text-xl">✏️</span> Thêm sự kiện mới</div>
 
                     <input required type="text" placeholder="Tên sự kiện / môn học..."
                       className="w-full rounded-2xl px-4 py-3 text-sm font-semibold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-pink-400 focus:bg-white transition-all"
@@ -889,7 +889,7 @@ const GameRoadmap = ({ user }) => {
                           <button key={cat.id} type="button" onClick={() => setEventFormData(p => ({ ...p, category: cat.id }))}
                             className="text-[11px] font-black px-3 py-1.5 rounded-xl transition-all shadow-sm hover:scale-105"
                             style={{ background: eventFormData.category === cat.id ? cat.bg : '#f8fafc', color: eventFormData.category === cat.id ? cat.text : '#64748b', border: `2px solid ${eventFormData.category === cat.id ? cat.color : '#e2e8f0'}` }}>
-                            {cat.label}
+                            {cat.icon} {cat.label}
                           </button>
                         ))}
                       </div>
@@ -924,7 +924,7 @@ const GameRoadmap = ({ user }) => {
                       <input type="text" placeholder="🏆 Mục tiêu / Phần thưởng"
                         className="rounded-2xl px-4 py-3 text-sm font-semibold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-amber-400 focus:bg-white transition-all"
                         value={eventFormData.rewards} onChange={e => setEventFormData(p => ({ ...p, rewards: e.target.value }))} />
-                      <input type="text" placeholder="📝 Ghi chú mỏng manh"
+                      <input type="text" placeholder="📝 Ghi chú thông tin"
                         className="rounded-2xl px-4 py-3 text-sm font-semibold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-blue-400 focus:bg-white transition-all"
                         value={eventFormData.notes} onChange={e => setEventFormData(p => ({ ...p, notes: e.target.value }))} />
                     </div>
@@ -951,7 +951,7 @@ const GameRoadmap = ({ user }) => {
 
                     <button type="submit"
                       className="w-full py-4 mt-2 rounded-2xl font-black uppercase text-sm tracking-wider transition-all hover:-translate-y-1 bg-gradient-to-r from-emerald-400 to-teal-500 text-white shadow-[0_10px_20px_rgba(16,185,129,0.3)]">
-                      🌱 GIEO HẠT SỰ KIỆN 🌱
+                      ✨ TẠO SỰ KIỆN MỚI
                     </button>
                   </form>
                 </div>
@@ -969,18 +969,18 @@ const GameRoadmap = ({ user }) => {
                     </div>
                     <button type="submit"
                       className="w-full md:w-auto px-8 py-3.5 rounded-2xl font-black text-sm transition-all hover:-translate-y-1 shadow-[0_10px_20px_rgba(236,72,153,0.3)] bg-gradient-to-r from-pink-500 to-rose-500 text-white h-auto">
-                      💖 KẾT NỐI
+                      👥 THÊM BẠN BÈ
                     </button>
                   </form>
 
                   {/* ID hiển thị */}
                   <div className="p-5 rounded-3xl text-center bg-gradient-to-br from-indigo-50 to-pink-50 border-2 border-dashed border-indigo-200 shadow-inner">
-                    <div className="text-[11px] font-black uppercase mb-2 text-indigo-500">ID Của Bạn — Chia sẻ để kết bạn nhé!</div>
+                    <div className="text-[11px] font-black uppercase mb-2 text-indigo-500">ID Của Bạn (Chia sẻ để kết bạn)</div>
                     <div className="font-black text-3xl tracking-[8px] font-mono text-indigo-600 drop-shadow-sm bg-white inline-block px-6 py-2 rounded-2xl border-2 border-white shadow-sm">{profile.shortId}</div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {friendsData.length === 0 && <div className="col-span-2 text-center py-8 text-[14px] font-bold text-slate-400 bg-white rounded-3xl border-2 border-slate-100 border-dashed">Chưa có bạn bè nào. Đừng ngần ngại chia sẻ ID nhé! 🌸</div>}
+                    {friendsData.length === 0 && <div className="col-span-2 text-center py-8 text-[14px] font-bold text-slate-400 bg-white rounded-3xl border-2 border-slate-100 border-dashed">Chưa có bạn bè nào. Đừng ngần ngại chia sẻ ID nhé!</div>}
                     {friendsData.map(friend => (
                       <div key={friend.uid} className="rounded-2xl p-4 flex items-center gap-4 transition-all bg-white border-2 border-slate-100 shadow-sm hover:border-pink-300 hover:shadow-md">
                         <img src={friend.avatar} alt="" className="w-14 h-14 rounded-2xl object-cover border-2 border-pink-100 shadow-sm" />
@@ -1016,9 +1016,9 @@ const GameRoadmap = ({ user }) => {
               {/* Overall */}
               <div className="grid grid-cols-4 gap-3">
                 {[
-                  { val: stats.total,    label: 'Tổng',       color: '#6366f1', bg: '#e0e7ff', border: '#c7d2fe', icon: '📋' },
+                  { val: stats.total,    label: 'Tổng số',    color: '#6366f1', bg: '#e0e7ff', border: '#c7d2fe', icon: '📋' },
                   { val: stats.done,     label: 'Hoàn thành', color: '#10b981', bg: '#d1fae5', border: '#a7f3d0', icon: '✅' },
-                  { val: stats.inProg,   label: 'Đang làm',   color: '#3b82f6', bg: '#dbeafe', border: '#bfdbfe', icon: '🌸' },
+                  { val: stats.inProg,   label: 'Đang làm',   color: '#3b82f6', bg: '#dbeafe', border: '#bfdbfe', icon: '⏳' },
                   { val: stats.urgentCount, label: 'Khẩn cấp', color: '#f43f5e', bg: '#ffe4e6', border: '#fecdd3', icon: '🔥' },
                 ].map(s => (
                   <div key={s.label} className="rounded-2xl p-3 text-center shadow-sm" style={{ background: s.bg, border: `1px solid ${s.border}` }}>
@@ -1048,7 +1048,7 @@ const GameRoadmap = ({ user }) => {
                 <div className="space-y-3">
                   {stats.catBreakdown.map(cat => (
                     <div key={cat.id} className="flex items-center gap-3">
-                      <div className="text-[12px] w-28 truncate font-black text-slate-600">{cat.label}</div>
+                      <div className="text-[12px] w-28 truncate font-black text-slate-600">{cat.icon} {cat.label}</div>
                       <div className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden border border-slate-200">
                         <div className="h-full rounded-full" style={{ width: stats.total > 0 ? `${(cat.count / stats.total) * 100}%` : '0%', background: cat.color }}></div>
                       </div>
@@ -1083,7 +1083,7 @@ const GameRoadmap = ({ user }) => {
                       <button onClick={() => setSelectedEventDetail(null)}
                         className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center font-black text-sm bg-white/80 text-slate-500 hover:bg-white hover:text-red-500 shadow-sm backdrop-blur-sm transition-all">✕</button>
                       <div className="absolute top-3 left-3 flex gap-2">
-                        <span className="text-[10px] font-black px-2.5 py-1 rounded-xl shadow-sm backdrop-blur-md" style={{ background: 'rgba(255,255,255,0.8)', color: cat.color, border: `1px solid ${cat.color}40` }}>{cat.label}</span>
+                        <span className="text-[10px] font-black px-2.5 py-1 rounded-xl shadow-sm backdrop-blur-md" style={{ background: 'rgba(255,255,255,0.8)', color: cat.color, border: `1px solid ${cat.color}40` }}>{cat.icon} {cat.label}</span>
                         <span className="text-[10px] font-black px-2.5 py-1 rounded-xl shadow-sm backdrop-blur-md" style={{ background: 'rgba(255,255,255,0.8)', color: '#475569', border: '1px solid rgba(0,0,0,0.1)' }}>{getPri(selectedEventDetail.priority).icon} {getPri(selectedEventDetail.priority).label}</span>
                         {selectedEventDetail.isShared && <span className="text-[10px] font-black px-2.5 py-1 rounded-xl shadow-sm backdrop-blur-md bg-pink-500 text-white">📢 Công Khai</span>}
                       </div>
@@ -1178,7 +1178,7 @@ const GameRoadmap = ({ user }) => {
               {urgentEvents.length === 0 ? (
                 <div className="text-center py-10 bg-white rounded-3xl border-2 border-dashed border-slate-200">
                   <div className="text-5xl mb-3">☕</div>
-                  <div className="text-[13px] font-black text-slate-500">Chưa có deadline nào ập tới!<br/><span className="text-indigo-400 text-[11px]">Cứ thong thả đi dạo nhé!</span></div>
+                  <div className="text-[13px] font-black text-slate-500">Chưa có hạn chót nào trong 3 ngày tới.<br/><span className="text-indigo-400 text-[11px]">Mọi thứ đang nằm trong tầm kiểm soát!</span></div>
                 </div>
               ) : urgentEvents.sort((a, b) => a.end - b.end).map(ev => {
                 const daysLeft = getDaysLeft(ev);
@@ -1193,7 +1193,7 @@ const GameRoadmap = ({ user }) => {
                         {daysLeft === 0 ? '🔥 NỘP NGAY HÔM NAY' : `⏳ CÒN ${daysLeft} NGÀY NỮA`}
                       </span>
                     </div>
-                    <div className="shrink-0 text-[10px] font-black px-2 py-1 rounded-lg self-center bg-slate-50 border border-slate-200" style={{ color: cat.color }}>{cat.label.split(' ')[0]}</div>
+                    <div className="shrink-0 text-[10px] font-black px-2 py-1 rounded-lg self-center bg-slate-50 border border-slate-200" style={{ color: cat.color }}>{cat.label}</div>
                   </div>
                 );
               })}
@@ -1208,9 +1208,9 @@ const GameRoadmap = ({ user }) => {
       {isCropModalOpen && upImg && (
         <div className="fixed inset-0 flex flex-col items-center justify-center z-[100] p-4" style={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(15px)' }}>
           <div className="text-center mb-6">
-            <h2 className="text-indigo-900 font-black text-2xl uppercase tracking-wide drop-shadow-sm">Cắt ảnh phép thuật</h2>
+            <h2 className="text-indigo-900 font-black text-2xl uppercase tracking-wide drop-shadow-sm">Cắt Ảnh</h2>
             <p className="text-[11px] mt-2 px-4 py-1.5 rounded-full inline-block font-bold bg-indigo-50 text-indigo-500 border border-indigo-200 shadow-sm">
-              Khung hình đã khóa để ảnh lên form đẹp nhất ✨
+              Khung hình đã được khóa tỉ lệ tiêu chuẩn.
             </p>
           </div>
           <div className="rounded-3xl overflow-hidden p-2 bg-white shadow-[0_20px_50px_rgba(99,102,241,0.15)] border-[3px] border-indigo-100" style={{ maxWidth: '95%' }}>
@@ -1225,7 +1225,7 @@ const GameRoadmap = ({ user }) => {
             </button>
             <button onClick={handleCropComplete}
               className="flex-1 py-3.5 rounded-2xl font-black text-sm bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-[0_10px_20px_rgba(99,102,241,0.3)] hover:-translate-y-1 transition-all">
-              ✅ Dùng Ảnh Này
+              ✅ Xác Nhận
             </button>
           </div>
         </div>
@@ -1260,7 +1260,7 @@ const GameRoadmap = ({ user }) => {
               {viewingFriendFeed.events.length === 0 ? (
                 <div className="text-center py-12 bg-white rounded-3xl border-2 border-dashed border-pink-100">
                   <div className="text-5xl mb-4">💤</div>
-                  <div className="text-[14px] font-black text-slate-400">Người bạn này chưa chia sẻ phép thuật nào!</div>
+                  <div className="text-[14px] font-black text-slate-400">Người dùng này chưa chia sẻ sự kiện nào.</div>
                 </div>
               ) : (
                 <div className="relative border-l-[3px] border-pink-200 ml-4 space-y-6">
@@ -1273,7 +1273,7 @@ const GameRoadmap = ({ user }) => {
                         <div className="bg-white border-2 border-pink-100 rounded-3xl p-4 shadow-sm hover:shadow-md transition-shadow hover:-translate-y-0.5">
                           <div className="flex items-center gap-2 mb-3">
                             <div className="text-[10px] font-black text-white bg-pink-400 inline-block px-2.5 py-1 rounded-lg shadow-sm">{ev.dateStr}</div>
-                            <div className="text-[10px] font-black px-2 py-1 rounded-lg bg-slate-50 text-slate-500 border border-slate-100">{cat.label}</div>
+                            <div className="text-[10px] font-black px-2 py-1 rounded-lg bg-slate-50 text-slate-500 border border-slate-100">{cat.icon} {cat.label}</div>
                           </div>
                           <h4 className="font-black text-slate-800 text-lg mb-3 leading-tight">{ev.title}</h4>
                           <img src={ev.image} alt="ev-img" className="w-full h-36 md:h-44 object-cover rounded-2xl border border-slate-100 shadow-sm" />
