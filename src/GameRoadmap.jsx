@@ -33,9 +33,12 @@ const getCat  = (id) => CATEGORIES.find(c => c.id === id) || CATEGORIES[5];
 const getStat = (id) => STATUSES.find(s => s.id === id)   || STATUSES[0];
 const getPri  = (id) => PRIORITIES.find(p => p.id === id) || PRIORITIES[1];
 
-// Helpers Date
+// ============================================================
+// HELPERS
+// ============================================================
 const formatDateToYMD = (dateObj) => {
   const d = new Date(dateObj);
+  if (isNaN(d.getTime())) return new Date().toISOString().split('T')[0]; // Fallback an toàn
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 const todayYMD = formatDateToYMD(new Date());
@@ -96,14 +99,14 @@ const GameRoadmap = ({ user }) => {
     avatar:      "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200",
     background:  "https://images.unsplash.com/photo-1541562232579-512a21360020?q=80&w=800",
     title:       "TỔNG QUAN LỊCH TRÌNH",
-    subtitle:    "v7.4",
+    subtitle:    "v7.5",
     displayName: "Người dùng mới",
     shortId:     "........",
     bio:         "",
   });
 
   const [events,        setEvents]        = useState([]);
-  const [dailySchedule, setDailySchedule] = useState([]); // Lịch ngày
+  const [dailySchedule, setDailySchedule] = useState([]);
   const [friendsList,   setFriendsList]   = useState([]);
   const [friendsData,   setFriendsData]   = useState([]);
   const [searchFriendId,    setSearchFriendId]    = useState('');
@@ -138,7 +141,20 @@ const GameRoadmap = ({ user }) => {
           })));
         }
         
-        if (data.dailySchedule) setDailySchedule(data.dailySchedule);
+        // --- DATA MIGRATION: Chuẩn hoá dữ liệu lịch ngày cũ tránh crash ---
+        if (data.dailySchedule) {
+          const patchedDaily = data.dailySchedule.map(t => ({
+            ...t,
+            startDate: t.startDate || todayYMD,
+            time: t.time || "00:00",
+            repeat: t.repeat || 'none',
+            customDays: t.customDays || 1,
+            completedDates: t.completedDates || (t.isDone ? [todayYMD] : []),
+            isShared: t.isShared || false
+          }));
+          setDailySchedule(patchedDaily);
+        }
+        
         if (data.friends) setFriendsList(data.friends);
       } else {
         const newProfile = { ...profile, shortId: generateID() };
@@ -210,7 +226,7 @@ const GameRoadmap = ({ user }) => {
     category: 'study', status: 'todo', priority: 'medium', progress: 0,
   });
 
-  // DAILY SCHEDULE STATE & LOGIC
+  // ── DAILY SCHEDULE STATE & LOGIC ──
   const [dailyViewDate, setDailyViewDate] = useState(todayYMD);
   const [dailyForm, setDailyForm] = useState({ 
     startDate: todayYMD, 
@@ -221,12 +237,13 @@ const GameRoadmap = ({ user }) => {
     isShared: false 
   });
 
-  // Hàm cốt lõi: Kiểm tra xem 1 task có xuất hiện vào targetDate không
   const checkTaskOnDate = (task, targetDateStr) => {
+    if (!task || !task.startDate) return false; // Lớp khiên bảo vệ
     const start = new Date(task.startDate); start.setHours(0,0,0,0);
     const target = new Date(targetDateStr); target.setHours(0,0,0,0);
     
-    if (target < start) return false; // Chưa tới ngày bắt đầu
+    if (isNaN(start.getTime()) || isNaN(target.getTime())) return false;
+    if (target < start) return false; 
 
     const diffTime = Math.abs(target - start);
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
@@ -244,7 +261,7 @@ const GameRoadmap = ({ user }) => {
   const filteredDailySchedule = useMemo(() => {
     return dailySchedule
       .filter(t => checkTaskOnDate(t, dailyViewDate))
-      .sort((a, b) => a.time.localeCompare(b.time));
+      .sort((a, b) => (a.time || "00:00").localeCompare(b.time || "00:00")); // So sánh an toàn
   }, [dailySchedule, dailyViewDate]);
 
   // ── 6. IMAGE CROP ──────────────────────────────────────────
@@ -371,8 +388,7 @@ const GameRoadmap = ({ user }) => {
 
   const handleUpdateEventField = (eventId, field, value) => {
     const updated = events.map(ev => ev.id === eventId ? { ...ev, [field]: value } : ev);
-    setEvents(updated);
-    saveToCloud(profile, updated);
+    setEvents(updated); saveToCloud(profile, updated);
     setSelectedEventDetail(updated.find(e => e.id === eventId));
   };
 
@@ -400,14 +416,12 @@ const GameRoadmap = ({ user }) => {
       repeat: dailyForm.repeat,
       customDays: Number(dailyForm.customDays) || 1,
       isShared: dailyForm.isShared,
-      completedDates: [] // Thay isDone boolean thành mảng lưu các ngày đã hoàn thành
+      completedDates: []
     };
     
     const updated = [...dailySchedule, newTask];
     setDailySchedule(updated);
     saveToCloud(profile, events, friendsList, updated);
-    
-    // Reset form task, giữ nguyên ngày/cấu hình lặp cho tiện nhập tiếp
     setDailyForm(p => ({ ...p, time: '', task: '' }));
   };
 
@@ -431,7 +445,6 @@ const GameRoadmap = ({ user }) => {
     setDailySchedule(updated);
     saveToCloud(profile, events, friendsList, updated);
   };
-  // ────────────────────────────
 
   const handleAddFriend = async (e) => {
     e.preventDefault();
@@ -452,24 +465,22 @@ const GameRoadmap = ({ user }) => {
     const fData = fDoc.data(); let fProfile = fData.profile;
     if (!fProfile.background) fProfile.background = fProfile.avatar;
     
-    // Lấy event công khai
     const sharedEvents = (fData.events || []).filter(ev => ev.isShared).map(ev => ({
       ...ev,
       start: ev.start.toDate ? ev.start.toDate() : new Date(ev.start),
       end:   ev.end.toDate   ? ev.end.toDate()   : new Date(ev.end),
     })).sort((a, b) => a.start - b.start);
 
-    // Lấy daily công khai TRONG HÔM NAY (chỉ show nếu tới ngày)
-    const todayStr = formatDateToYMD(new Date());
+    // Lọc task công khai của bạn bè theo đúng ngày hôm nay
     const sharedDaily = (fData.dailySchedule || [])
-      .filter(t => t.isShared && checkTaskOnDate(t, todayStr))
-      .sort((a, b) => a.time.localeCompare(b.time));
+      .filter(t => t.isShared && checkTaskOnDate(t, todayYMD))
+      .sort((a, b) => (a.time || "00:00").localeCompare(b.time || "00:00"));
 
     setViewingFriendFeed({
       profile: fProfile,
       events: sharedEvents,
       daily: sharedDaily,
-      viewDate: todayStr
+      viewDate: todayYMD
     });
     setIsSettingsOpen(false);
   };
@@ -874,7 +885,7 @@ const GameRoadmap = ({ user }) => {
                   { id: 'friends', label: 'Bạn Bè',         icon: '👥' },
                 ].map(tab => (
                   <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                    className="px-5 py-2 rounded-xl text-[12px] font-black uppercase tracking-wide transition-all shadow-sm"
+                    className="px-5 py-2 rounded-xl text-[12px] font-black uppercase tracking-wide transition-all shadow-sm cursor-pointer"
                     style={{
                       background: activeTab === tab.id ? '#fbcfe8' : '#ffffff',
                       color: activeTab === tab.id ? '#be185d' : '#64748b',
@@ -885,7 +896,7 @@ const GameRoadmap = ({ user }) => {
                 ))}
               </div>
               <button onClick={() => setIsSettingsOpen(false)}
-                className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-black transition-all bg-white text-slate-400 hover:bg-pink-500 hover:text-white border-2 border-slate-200 hover:border-pink-500 shadow-sm">✕</button>
+                className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-black transition-all bg-white text-slate-400 hover:bg-pink-500 hover:text-white border-2 border-slate-200 hover:border-pink-500 shadow-sm cursor-pointer">✕</button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-5 md:p-8 custom-scrollbar bg-slate-50/50">
@@ -893,7 +904,7 @@ const GameRoadmap = ({ user }) => {
               {/* ── TAB: TÀI KHOẢN ── */}
               {activeTab === 'profile' && (
                 <div className="space-y-6">
-                  {/* ... Code cũ ... */}
+                  {/* Preview */}
                   <div className="relative h-32 rounded-3xl overflow-hidden border-[3px] border-white shadow-md bg-white">
                     <img src={profileFormData.background} alt="bg" className="absolute inset-0 w-full h-full object-cover opacity-80" />
                     <div className="absolute inset-0 bg-gradient-to-r from-white/90 to-transparent"></div>
@@ -934,7 +945,7 @@ const GameRoadmap = ({ user }) => {
                           <input type="file" accept="image/*" onChange={e => onSelectFile(e, f.target)}
                             className="flex-1 text-xs px-2 cursor-pointer file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-indigo-50 file:text-indigo-600 hover:file:bg-indigo-100 transition-colors text-slate-500" />
                           <button type="button" onClick={() => handlePasteButtonClick(f.target)}
-                            className="shrink-0 px-4 py-2 rounded-xl text-xs font-black transition-all bg-indigo-500 text-white shadow-[0_4px_10px_rgba(99,102,241,0.3)] hover:scale-105">
+                            className="shrink-0 px-4 py-2 rounded-xl text-xs font-black transition-all bg-indigo-500 text-white shadow-[0_4px_10px_rgba(99,102,241,0.3)] hover:scale-105 cursor-pointer">
                             📋 Dán
                           </button>
                         </div>
@@ -944,7 +955,7 @@ const GameRoadmap = ({ user }) => {
 
                   <div className="pt-6 mt-4 border-t-2 border-slate-100">
                     <button onClick={handleSaveProfile}
-                      className="w-full py-4 rounded-2xl font-black uppercase text-sm tracking-wider transition-all hover:-translate-y-1 bg-gradient-to-r from-pink-400 to-indigo-400 text-white shadow-[0_10px_20px_rgba(236,72,153,0.3)]">
+                      className="w-full py-4 rounded-2xl font-black uppercase text-sm tracking-wider transition-all hover:-translate-y-1 bg-gradient-to-r from-pink-400 to-indigo-400 text-white shadow-[0_10px_20px_rgba(236,72,153,0.3)] cursor-pointer">
                       💾 LƯU CẤU HÌNH
                     </button>
                   </div>
@@ -968,7 +979,7 @@ const GameRoadmap = ({ user }) => {
                           <span className="text-[10px] font-bold px-2 py-1 rounded-lg" style={{ background: cat.bg, color: cat.text, border: `1px solid ${cat.border}` }}>{cat.label}</span>
                           {ev.isShared && <span className="text-[10px] bg-pink-100 text-pink-600 px-2 py-1 rounded-lg border border-pink-200 font-bold shrink-0">Công khai</span>}
                           <button onClick={() => handleDeleteEvent(ev.id)}
-                            className="text-[10px] font-black px-3 py-1.5 rounded-lg transition-all hover:scale-105 bg-red-100 text-red-600 border border-red-200">Xóa</button>
+                            className="text-[10px] font-black px-3 py-1.5 rounded-lg transition-all hover:scale-105 bg-red-100 text-red-600 border border-red-200 cursor-pointer">Xóa</button>
                         </div>
                       );
                     })}
@@ -976,7 +987,6 @@ const GameRoadmap = ({ user }) => {
 
                   {/* Add Event Form */}
                   <form onSubmit={handleAddEvent} className="space-y-4 bg-white p-5 rounded-3xl border-2 border-slate-100 shadow-sm">
-                    {/* ... Form input events giữ nguyên như cũ ... */}
                     <div className="text-[13px] font-black uppercase text-pink-500 flex items-center gap-2 mb-2"><span className="text-xl">✏️</span> Thêm sự kiện mới</div>
                     <input required type="text" placeholder="Tên sự kiện / môn học..."
                       className="w-full rounded-2xl px-4 py-3 text-sm font-semibold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-pink-400 focus:bg-white transition-all"
@@ -995,7 +1005,7 @@ const GameRoadmap = ({ user }) => {
                       <div className="flex flex-wrap gap-2">
                         {CATEGORIES.map(cat => (
                           <button key={cat.id} type="button" onClick={() => setEventFormData(p => ({ ...p, category: cat.id }))}
-                            className="text-[11px] font-black px-3 py-1.5 rounded-xl transition-all shadow-sm hover:scale-105"
+                            className="text-[11px] font-black px-3 py-1.5 rounded-xl transition-all shadow-sm hover:scale-105 cursor-pointer"
                             style={{ background: eventFormData.category === cat.id ? cat.bg : '#f8fafc', color: eventFormData.category === cat.id ? cat.text : '#64748b', border: `2px solid ${eventFormData.category === cat.id ? cat.color : '#e2e8f0'}` }}>
                             {cat.icon} {cat.label}
                           </button>
@@ -1008,7 +1018,7 @@ const GameRoadmap = ({ user }) => {
                         <div className="flex gap-1.5 bg-slate-50 p-1.5 rounded-2xl border-2 border-slate-200">
                           {PRIORITIES.map(p => (
                             <button key={p.id} type="button" onClick={() => setEventFormData(f => ({ ...f, priority: p.id }))}
-                              className="flex-1 text-[11px] font-black py-1.5 rounded-xl transition-all shadow-sm"
+                              className="flex-1 text-[11px] font-black py-1.5 rounded-xl transition-all shadow-sm cursor-pointer"
                               style={{ background: eventFormData.priority === p.id ? '#ffffff' : 'transparent', color: eventFormData.priority === p.id ? '#1e293b' : '#94a3b8', border: eventFormData.priority === p.id ? '1px solid #e2e8f0' : '1px solid transparent' }}>
                               {p.icon} {p.label}
                             </button>
@@ -1037,7 +1047,7 @@ const GameRoadmap = ({ user }) => {
                         <input type="file" accept="image/*" onChange={e => onSelectFile(e, 'event')}
                           className="flex-1 text-xs px-2 cursor-pointer file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-black file:bg-pink-100 file:text-pink-600 hover:file:bg-pink-200 transition-colors text-slate-500" />
                         <button type="button" onClick={() => handlePasteButtonClick('event')}
-                          className="shrink-0 px-4 py-2 rounded-xl text-xs font-black transition-all bg-pink-500 text-white shadow-[0_4px_10px_rgba(236,72,153,0.3)] hover:scale-105">
+                          className="shrink-0 px-4 py-2 rounded-xl text-xs font-black transition-all bg-pink-500 text-white shadow-[0_4px_10px_rgba(236,72,153,0.3)] hover:scale-105 cursor-pointer">
                           📋 Dán
                         </button>
                       </div>
@@ -1045,30 +1055,30 @@ const GameRoadmap = ({ user }) => {
                         <div className="mt-3 relative inline-block">
                           <img src={eventFormData.croppedImage} alt="preview" className="h-16 rounded-xl border-4 border-white shadow-md" />
                           <button type="button" onClick={() => setEventFormData(p => ({ ...p, croppedImage: null }))}
-                            className="absolute -top-2 -right-2 w-6 h-6 rounded-full text-[10px] font-black flex items-center justify-center bg-red-500 text-white shadow-sm border-2 border-white hover:scale-110 transition-transform">✕</button>
+                            className="absolute -top-2 -right-2 w-6 h-6 rounded-full text-[10px] font-black flex items-center justify-center bg-red-500 text-white shadow-sm border-2 border-white hover:scale-110 transition-transform cursor-pointer">✕</button>
                         </div>
                       )}
                     </div>
                     <button type="submit"
-                      className="w-full py-4 mt-2 rounded-2xl font-black uppercase text-sm tracking-wider transition-all hover:-translate-y-1 bg-gradient-to-r from-emerald-400 to-teal-500 text-white shadow-[0_10px_20px_rgba(16,185,129,0.3)]">
+                      className="w-full py-4 mt-2 rounded-2xl font-black uppercase text-sm tracking-wider transition-all hover:-translate-y-1 bg-gradient-to-r from-emerald-400 to-teal-500 text-white shadow-[0_10px_20px_rgba(16,185,129,0.3)] cursor-pointer">
                       ✨ TẠO SỰ KIỆN MỚI
                     </button>
                   </form>
                 </div>
               )}
 
-              {/* ── TAB: LỊCH TRÌNH TRONG NGÀY (CẬP NHẬT MỚI) ── */}
+              {/* ── TAB: LỊCH TRÌNH TRONG NGÀY ── */}
               {activeTab === 'daily' && (
                 <div className="space-y-6">
                   
-                  {/* Controls for Viewing Date */}
+                  {/* Controls cho View Date */}
                   <div className="flex flex-col sm:flex-row items-center justify-between bg-indigo-50 p-4 rounded-3xl border-2 border-indigo-100 shadow-sm gap-3">
                     <div className="text-[12px] font-black uppercase text-indigo-600">Đang xem lịch ngày:</div>
                     <div className="flex items-center gap-2">
                       <button onClick={() => {
                         const d = new Date(dailyViewDate); d.setDate(d.getDate() - 1);
                         setDailyViewDate(formatDateToYMD(d));
-                      }} className="w-10 h-10 rounded-xl bg-white border border-indigo-200 text-indigo-600 font-black shadow-sm hover:bg-indigo-600 hover:text-white transition-colors">←</button>
+                      }} className="w-10 h-10 rounded-xl bg-white border border-indigo-200 text-indigo-600 font-black shadow-sm hover:bg-indigo-600 hover:text-white transition-colors cursor-pointer">←</button>
                       
                       <input type="date" value={dailyViewDate} onChange={e => setDailyViewDate(e.target.value)}
                         className="px-4 py-2.5 rounded-xl border-2 border-indigo-200 outline-none font-black text-slate-700 bg-white" />
@@ -1076,10 +1086,10 @@ const GameRoadmap = ({ user }) => {
                       <button onClick={() => {
                         const d = new Date(dailyViewDate); d.setDate(d.getDate() + 1);
                         setDailyViewDate(formatDateToYMD(d));
-                      }} className="w-10 h-10 rounded-xl bg-white border border-indigo-200 text-indigo-600 font-black shadow-sm hover:bg-indigo-600 hover:text-white transition-colors">→</button>
+                      }} className="w-10 h-10 rounded-xl bg-white border border-indigo-200 text-indigo-600 font-black shadow-sm hover:bg-indigo-600 hover:text-white transition-colors cursor-pointer">→</button>
                     </div>
                     <button onClick={() => setDailyViewDate(todayYMD)} 
-                      className={`text-[11px] font-black px-4 py-2.5 rounded-xl transition-all shadow-sm ${dailyViewDate === todayYMD ? 'bg-indigo-600 text-white' : 'bg-white text-indigo-600 border border-indigo-200'}`}>Hôm nay</button>
+                      className={`text-[11px] font-black px-4 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer ${dailyViewDate === todayYMD ? 'bg-indigo-600 text-white' : 'bg-white text-indigo-600 border border-indigo-200'}`}>Hôm nay</button>
                   </div>
 
                   {/* Add Task Form */}
@@ -1089,7 +1099,7 @@ const GameRoadmap = ({ user }) => {
                       <div className="col-span-2 md:col-span-1">
                         <label className="text-[10px] font-black uppercase mb-1.5 block text-indigo-500">Từ ngày</label>
                         <input required type="date"
-                          className="w-full rounded-2xl px-3 py-2.5 text-sm font-bold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-indigo-400 focus:bg-white transition-all"
+                          className="w-full rounded-2xl px-3 py-2.5 text-sm font-bold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-indigo-400 focus:bg-white transition-all cursor-pointer"
                           value={dailyForm.startDate} onChange={e => setDailyForm(p => ({ ...p, startDate: e.target.value }))} />
                       </div>
                       
@@ -1097,7 +1107,7 @@ const GameRoadmap = ({ user }) => {
                       <div className="col-span-2 md:col-span-1">
                         <label className="text-[10px] font-black uppercase mb-1.5 block text-indigo-500">Giờ (00-23)</label>
                         <input required type="time"
-                          className="w-full rounded-2xl px-3 py-2.5 text-lg font-bold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-indigo-400 focus:bg-white transition-all text-center"
+                          className="w-full rounded-2xl px-3 py-2.5 text-lg font-bold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-indigo-400 focus:bg-white transition-all text-center cursor-pointer"
                           value={dailyForm.time} onChange={e => setDailyForm(p => ({ ...p, time: e.target.value }))} />
                       </div>
                       
@@ -1105,7 +1115,7 @@ const GameRoadmap = ({ user }) => {
                       <div className="col-span-2">
                         <label className="text-[10px] font-black uppercase mb-1.5 block text-indigo-500">Chu kỳ lặp</label>
                         <select
-                          className="w-full rounded-2xl px-3 py-3 text-[13px] font-bold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-indigo-400"
+                          className="w-full rounded-2xl px-3 py-3 text-[13px] font-bold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-indigo-400 cursor-pointer"
                           value={dailyForm.repeat} onChange={e => setDailyForm(p => ({ ...p, repeat: e.target.value }))}>
                           <option value="none">Không lặp lại</option>
                           <option value="daily">Mỗi ngày</option>
@@ -1117,17 +1127,15 @@ const GameRoadmap = ({ user }) => {
                       </div>
                     </div>
 
-                    {/* Hàng 2: Nội dung + Tùy chỉnh + Submit */}
                     <div className="flex flex-col md:flex-row gap-4 items-end">
                       <div className="flex-1 w-full relative">
                         <label className="text-[10px] font-black uppercase mb-1.5 block text-indigo-500">Nội dung công việc</label>
                         <input required type="text" placeholder="Ví dụ: Tập thể dục..."
-                          className="w-full rounded-2xl px-4 py-3 text-sm font-semibold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-indigo-400 focus:bg-white transition-all pr-24"
+                          className="w-full rounded-2xl px-4 py-3 text-sm font-semibold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-indigo-400 focus:bg-white transition-all pr-28"
                           value={dailyForm.task} onChange={e => setDailyForm(p => ({ ...p, task: e.target.value }))} />
                           
-                        {/* Nút Công Khai Nhanh */}
                         <label className="absolute right-2 bottom-2 bg-pink-50 border border-pink-200 text-pink-600 px-3 py-1.5 rounded-xl text-[10px] font-black cursor-pointer flex items-center gap-1.5 transition-colors hover:bg-pink-100">
-                          <input type="checkbox" checked={dailyForm.isShared} onChange={e => setDailyForm(p => ({ ...p, isShared: e.target.checked }))} className="accent-pink-500" />
+                          <input type="checkbox" checked={dailyForm.isShared} onChange={e => setDailyForm(p => ({ ...p, isShared: e.target.checked }))} className="accent-pink-500 cursor-pointer" />
                           Công khai
                         </label>
                       </div>
@@ -1142,13 +1150,13 @@ const GameRoadmap = ({ user }) => {
                       )}
 
                       <button type="submit"
-                        className="w-full md:w-auto px-6 py-3.5 rounded-2xl font-black text-sm transition-all hover:-translate-y-1 shadow-[0_10px_20px_rgba(99,102,241,0.3)] bg-gradient-to-r from-indigo-500 to-blue-500 text-white whitespace-nowrap">
+                        className="w-full md:w-auto px-6 py-3.5 rounded-2xl font-black text-sm transition-all hover:-translate-y-1 shadow-[0_10px_20px_rgba(99,102,241,0.3)] bg-gradient-to-r from-indigo-500 to-blue-500 text-white whitespace-nowrap cursor-pointer">
                         ➕ THÊM VÀO LỊCH
                       </button>
                     </div>
                   </form>
 
-                  {/* Task List hiển thị THEO NGÀY ĐANG XEM */}
+                  {/* Task List */}
                   <div className="rounded-3xl p-5 bg-white border-2 border-slate-100 shadow-sm">
                     <div className="text-[13px] font-black uppercase text-indigo-500 mb-4 flex items-center gap-2">
                       <span className="text-xl">⏰</span> Lịch trình ngày {dailyViewDate} ({filteredDailySchedule.length})
@@ -1166,7 +1174,7 @@ const GameRoadmap = ({ user }) => {
                             <div key={item.id} className={`flex items-center gap-3 md:gap-4 p-3.5 rounded-2xl border-2 transition-all ${isDoneOnThisDate ? 'bg-slate-50 border-slate-100 opacity-60' : 'bg-white border-indigo-100 hover:border-indigo-300 shadow-sm hover:-translate-y-0.5'}`}>
                               
                               <button onClick={() => handleToggleDailyTask(item.id, dailyViewDate)}
-                                className={`w-7 h-7 rounded-full flex items-center justify-center text-sm shrink-0 transition-colors shadow-inner ${isDoneOnThisDate ? 'bg-emerald-500 text-white border border-emerald-600' : 'bg-slate-50 border-2 border-slate-300 text-transparent hover:border-emerald-400'}`}>
+                                className={`w-7 h-7 rounded-full flex items-center justify-center text-sm shrink-0 transition-colors shadow-inner cursor-pointer ${isDoneOnThisDate ? 'bg-emerald-500 text-white border border-emerald-600' : 'bg-slate-50 border-2 border-slate-300 text-transparent hover:border-emerald-400'}`}>
                                 ✔
                               </button>
                               
@@ -1178,7 +1186,6 @@ const GameRoadmap = ({ user }) => {
                                 <div className={`text-[13px] md:text-[14px] font-bold truncate ${isDoneOnThisDate ? 'line-through text-slate-400' : 'text-slate-700'}`}>
                                   {item.task}
                                 </div>
-                                {/* Badge Info */}
                                 <div className="flex gap-1.5 mt-1">
                                   {item.repeat !== 'none' && (
                                     <span className="text-[9px] font-black px-1.5 py-0.5 rounded border border-slate-200 text-slate-400 bg-slate-50">
@@ -1192,7 +1199,7 @@ const GameRoadmap = ({ user }) => {
                               </div>
                               
                               <button onClick={() => handleDeleteDailyTask(item.id)}
-                                className="w-8 h-8 md:w-9 md:h-9 flex items-center justify-center rounded-xl bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-colors border border-red-100 shrink-0">
+                                className="w-8 h-8 md:w-9 md:h-9 flex items-center justify-center rounded-xl bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-colors border border-red-100 shrink-0 cursor-pointer">
                                 ✕
                               </button>
                             </div>
@@ -1215,7 +1222,7 @@ const GameRoadmap = ({ user }) => {
                         value={searchFriendId} onChange={e => setSearchFriendId(e.target.value)} />
                     </div>
                     <button type="submit"
-                      className="w-full md:w-auto px-8 py-3.5 rounded-2xl font-black text-sm transition-all hover:-translate-y-1 shadow-[0_10px_20px_rgba(236,72,153,0.3)] bg-gradient-to-r from-pink-500 to-rose-500 text-white h-auto">
+                      className="w-full md:w-auto px-8 py-3.5 rounded-2xl font-black text-sm transition-all hover:-translate-y-1 shadow-[0_10px_20px_rgba(236,72,153,0.3)] bg-gradient-to-r from-pink-500 to-rose-500 text-white h-auto cursor-pointer">
                       👥 THÊM BẠN BÈ
                     </button>
                   </form>
@@ -1235,7 +1242,7 @@ const GameRoadmap = ({ user }) => {
                           <div className="text-[11px] font-black font-mono text-pink-400 mt-0.5">ID: {friend.shortId}</div>
                         </div>
                         <button onClick={() => handleViewFriendFeed(friend.uid)}
-                          className="px-4 py-2 rounded-xl text-[11px] font-black transition-all hover:scale-105 bg-indigo-50 text-indigo-600 border border-indigo-200 uppercase">
+                          className="px-4 py-2 rounded-xl text-[11px] font-black transition-all hover:scale-105 bg-indigo-50 text-indigo-600 border border-indigo-200 uppercase cursor-pointer">
                           Xem lịch
                         </button>
                       </div>
@@ -1249,16 +1256,14 @@ const GameRoadmap = ({ user }) => {
       )}
 
       {/* ════════════════════════════════════════════════════════
-          STATISTICS & EVENT DETAIL & DEADLINE & CROP MODALS
+          STATISTICS & MODALS
       ════════════════════════════════════════════════════════ */}
-      {/* ... Phần Modals thống kê, chi tiết sự kiện, crop ảnh hoàn toàn giữ nguyên như cũ ... */}
-      {/* Thống kê */}
       {isStatsOpen && (
         <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(10px)' }} onClick={() => setIsStatsOpen(false)}>
           <div className="w-full max-w-[520px] rounded-[2rem] overflow-hidden bg-white border-[3px] border-indigo-100 shadow-[0_20px_50px_rgba(79,70,229,0.15)] relative" onClick={e => e.stopPropagation()}>
             <div className="px-6 py-5 flex items-center justify-between bg-indigo-50 border-b border-indigo-100">
               <h2 className="font-black text-xl text-indigo-900 flex items-center gap-2"><span>📊</span> Bảng Thống Kê</h2>
-              <button onClick={() => setIsStatsOpen(false)} className="text-slate-400 hover:text-indigo-600 hover:bg-white w-8 h-8 rounded-full flex items-center justify-center font-black transition-all shadow-sm border border-transparent hover:border-indigo-200">✕</button>
+              <button onClick={() => setIsStatsOpen(false)} className="text-slate-400 hover:text-indigo-600 hover:bg-white w-8 h-8 rounded-full flex items-center justify-center font-black transition-all shadow-sm border border-transparent hover:border-indigo-200 cursor-pointer">✕</button>
             </div>
             <div className="p-6 space-y-5 bg-slate-50/50">
               {/* Overall */}
@@ -1310,7 +1315,6 @@ const GameRoadmap = ({ user }) => {
         </div>
       )}
 
-      {/* Chi tiết Event */}
       {selectedEventDetail && (
         <div className="fixed inset-0 flex items-center justify-center z-[120] p-4" style={{ background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)' }} onClick={() => setSelectedEventDetail(null)}>
           <div className="w-full max-w-[420px] rounded-[2rem] overflow-hidden shadow-[0_20px_60px_rgba(0,0,0,0.1)] bg-white relative flex flex-col" onClick={e => e.stopPropagation()}
@@ -1320,13 +1324,12 @@ const GameRoadmap = ({ user }) => {
               const stat = getStat(selectedEventDetail.status);
               return (
                 <>
-                  {/* Cover */}
                   <div className="relative h-48 bg-slate-50 p-2">
                     <div className="w-full h-full rounded-2xl overflow-hidden relative border-2 shadow-inner" style={{ borderColor: cat.border }}>
                       <img src={selectedEventDetail.image} alt="" className="absolute inset-0 w-full h-full object-cover" style={{ opacity: selectedEventDetail.status === 'done' ? 0.5 : 1 }} />
                       <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(255,255,255,1) 0%, rgba(255,255,255,0) 100%)' }}></div>
                       <button onClick={() => setSelectedEventDetail(null)}
-                        className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center font-black text-sm bg-white/80 text-slate-500 hover:bg-white hover:text-red-500 shadow-sm backdrop-blur-sm transition-all">✕</button>
+                        className="absolute top-3 right-3 w-8 h-8 rounded-full flex items-center justify-center font-black text-sm bg-white/80 text-slate-500 hover:bg-white hover:text-red-500 shadow-sm backdrop-blur-sm transition-all cursor-pointer">✕</button>
                       <div className="absolute top-3 left-3 flex gap-2">
                         <span className="text-[10px] font-black px-2.5 py-1 rounded-xl shadow-sm backdrop-blur-md" style={{ background: 'rgba(255,255,255,0.8)', color: cat.color, border: `1px solid ${cat.color}40` }}>{cat.icon} {cat.label}</span>
                         <span className="text-[10px] font-black px-2.5 py-1 rounded-xl shadow-sm backdrop-blur-md" style={{ background: 'rgba(255,255,255,0.8)', color: '#475569', border: '1px solid rgba(0,0,0,0.1)' }}>{getPri(selectedEventDetail.priority).icon} {getPri(selectedEventDetail.priority).label}</span>
@@ -1338,7 +1341,6 @@ const GameRoadmap = ({ user }) => {
                   <div className="p-6 pt-2 space-y-4 flex-1 bg-white">
                     <h3 className="font-black text-2xl text-slate-800 leading-tight drop-shadow-sm text-center mb-6">{selectedEventDetail.title}</h3>
 
-                    {/* Date & Status */}
                     <div className="grid grid-cols-2 gap-3">
                       <div className="rounded-2xl p-3 text-center bg-slate-50 border border-slate-100 shadow-sm">
                         <div className="text-[10px] font-black uppercase mb-1.5 text-indigo-400">Thời gian</div>
@@ -1349,14 +1351,13 @@ const GameRoadmap = ({ user }) => {
                         <select
                           value={selectedEventDetail.status}
                           onChange={e => handleUpdateEventField(selectedEventDetail.id, 'status', e.target.value)}
-                          className="w-full text-[12px] rounded-xl px-2 py-1.5 outline-none font-black bg-white shadow-inner transition-colors"
+                          className="w-full text-[12px] rounded-xl px-2 py-1.5 outline-none font-black bg-white shadow-inner transition-colors cursor-pointer"
                           style={{ border: `2px solid ${stat.accent}50`, color: stat.accent }}>
                           {STATUSES.map(s => <option key={s.id} value={s.id}>{s.icon} {s.label}</option>)}
                         </select>
                       </div>
                     </div>
 
-                    {/* Progress */}
                     {selectedEventDetail.status === 'in-progress' && (
                       <div className="rounded-2xl p-4 bg-blue-50 border border-blue-100 shadow-sm">
                         <div className="flex justify-between text-[11px] font-black mb-2">
@@ -1366,11 +1367,10 @@ const GameRoadmap = ({ user }) => {
                         <input type="range" min="0" max="100"
                           value={selectedEventDetail.progress || 0}
                           onChange={e => handleUpdateEventField(selectedEventDetail.id, 'progress', Number(e.target.value))}
-                          className="w-full accent-blue-500 h-2 bg-white rounded-full border border-blue-200" />
+                          className="w-full accent-blue-500 h-2 bg-white rounded-full border border-blue-200 cursor-pointer" />
                       </div>
                     )}
 
-                    {/* Rewards & Notes */}
                     {selectedEventDetail.rewards && (
                       <div className="flex items-start gap-3 rounded-2xl p-3 bg-amber-50 border border-amber-100 shadow-sm">
                         <span className="text-2xl drop-shadow-sm mt-1">🏆</span>
@@ -1390,14 +1390,13 @@ const GameRoadmap = ({ user }) => {
                       </div>
                     )}
 
-                    {/* Actions */}
                     <div className="grid grid-cols-2 gap-3 pt-4 border-t-2 border-slate-100">
                       <button onClick={() => handleToggleShareEvent(selectedEventDetail.id)}
-                        className={`py-3 rounded-2xl font-black text-[11px] uppercase tracking-wider transition-all shadow-sm flex items-center justify-center gap-1.5 border-2 ${selectedEventDetail.isShared ? 'bg-white text-pink-500 border-pink-200 hover:border-pink-500' : 'bg-gradient-to-r from-pink-400 to-pink-500 text-white border-transparent hover:shadow-[0_5px_15px_rgba(236,72,153,0.3)]'}`}>
+                        className={`py-3 rounded-2xl font-black text-[11px] uppercase tracking-wider transition-all shadow-sm flex items-center justify-center gap-1.5 border-2 cursor-pointer ${selectedEventDetail.isShared ? 'bg-white text-pink-500 border-pink-200 hover:border-pink-500' : 'bg-gradient-to-r from-pink-400 to-pink-500 text-white border-transparent hover:shadow-[0_5px_15px_rgba(236,72,153,0.3)]'}`}>
                         {selectedEventDetail.isShared ? '🔒 Thu hồi' : '📢 Lên sóng'}
                       </button>
                       <button onClick={() => handleDeleteEvent(selectedEventDetail.id)}
-                        className="py-3 rounded-2xl font-black text-[11px] uppercase tracking-wider transition-all bg-white text-red-500 border-2 border-red-100 hover:border-red-500 hover:bg-red-50 shadow-sm flex items-center justify-center gap-1.5">
+                        className="py-3 rounded-2xl font-black text-[11px] uppercase tracking-wider transition-all bg-white text-red-500 border-2 border-red-100 hover:border-red-500 hover:bg-red-50 shadow-sm flex items-center justify-center gap-1.5 cursor-pointer">
                         🗑 Xóa
                       </button>
                     </div>
@@ -1409,13 +1408,12 @@ const GameRoadmap = ({ user }) => {
         </div>
       )}
 
-      {/* Deadline */}
       {isDeadlineModalOpen && (
         <div className="fixed inset-0 flex items-center justify-center z-[110] p-4" style={{ background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)' }} onClick={() => setIsDeadlineModalOpen(false)}>
           <div className="w-full max-w-[400px] max-h-[80vh] rounded-[2rem] overflow-hidden flex flex-col bg-white border-4 border-red-100 shadow-[0_20px_50px_rgba(239,68,68,0.15)]" onClick={e => e.stopPropagation()}>
             <div className="px-6 py-4 flex items-center justify-between bg-red-50 border-b-2 border-red-100">
               <h2 className="font-black text-lg text-red-500 flex items-center gap-2"><span>🚨</span> BÁO ĐỘNG ĐỎ</h2>
-              <button onClick={() => setIsDeadlineModalOpen(false)} className="font-black text-slate-400 hover:text-red-500 bg-white w-8 h-8 rounded-full shadow-sm border border-slate-200 flex items-center justify-center transition-colors">✕</button>
+              <button onClick={() => setIsDeadlineModalOpen(false)} className="font-black text-slate-400 hover:text-red-500 bg-white w-8 h-8 rounded-full shadow-sm border border-slate-200 flex items-center justify-center transition-colors cursor-pointer">✕</button>
             </div>
             <div className="flex-1 overflow-y-auto p-5 space-y-3 custom-scrollbar bg-slate-50/50">
               {urgentEvents.length === 0 ? (
@@ -1445,7 +1443,6 @@ const GameRoadmap = ({ user }) => {
         </div>
       )}
 
-      {/* Crop Ảnh */}
       {isCropModalOpen && upImg && (
         <div className="fixed inset-0 flex flex-col items-center justify-center z-[100] p-4" style={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(15px)' }}>
           <div className="text-center mb-6">
@@ -1461,11 +1458,11 @@ const GameRoadmap = ({ user }) => {
           </div>
           <div className="flex gap-4 mt-8 w-full max-w-[400px]">
             <button onClick={() => { setIsCropModalOpen(false); setUpImg(null); }}
-              className="flex-1 py-3.5 rounded-2xl font-black text-sm bg-white text-slate-500 border-2 border-slate-200 hover:bg-slate-50 hover:text-slate-700 shadow-sm transition-all">
+              className="flex-1 py-3.5 rounded-2xl font-black text-sm bg-white text-slate-500 border-2 border-slate-200 hover:bg-slate-50 hover:text-slate-700 shadow-sm transition-all cursor-pointer">
               Huỷ
             </button>
             <button onClick={handleCropComplete}
-              className="flex-1 py-3.5 rounded-2xl font-black text-sm bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-[0_10px_20px_rgba(99,102,241,0.3)] hover:-translate-y-1 transition-all">
+              className="flex-1 py-3.5 rounded-2xl font-black text-sm bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-[0_10px_20px_rgba(99,102,241,0.3)] hover:-translate-y-1 transition-all cursor-pointer">
               ✅ Xác Nhận
             </button>
           </div>
@@ -1473,7 +1470,7 @@ const GameRoadmap = ({ user }) => {
       )}
 
       {/* ════════════════════════════════════════════════════════
-          FRIEND FEED MODAL (CẬP NHẬT HIỂN THỊ LỊCH NGÀY)
+          FRIEND FEED MODAL
       ════════════════════════════════════════════════════════ */}
       {viewingFriendFeed && (
         <div className="fixed inset-0 flex items-center justify-center z-[130] p-2 md:p-4" style={{ background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)' }} onClick={() => setViewingFriendFeed(null)}>
@@ -1486,7 +1483,7 @@ const GameRoadmap = ({ user }) => {
                 <div className="absolute inset-0 bg-gradient-to-t from-white/90 via-white/20 to-transparent"></div>
               </div>
               <button onClick={() => setViewingFriendFeed(null)}
-                className="absolute top-5 right-5 w-10 h-10 rounded-full flex items-center justify-center font-black bg-white/80 text-slate-500 hover:bg-white hover:text-pink-500 border-2 border-white shadow-md backdrop-blur-sm transition-all z-20">✕</button>
+                className="absolute top-5 right-5 w-10 h-10 rounded-full flex items-center justify-center font-black bg-white/80 text-slate-500 hover:bg-white hover:text-pink-500 border-2 border-white shadow-md backdrop-blur-sm transition-all z-20 cursor-pointer">✕</button>
               
               <div className="absolute -bottom-10 left-6 flex items-end gap-4 z-10">
                 <img src={viewingFriendFeed.profile.avatar} alt="" className="w-24 h-24 rounded-[1.5rem] border-4 object-cover shadow-lg bg-white" style={{ borderColor: 'white' }} />
@@ -1499,7 +1496,6 @@ const GameRoadmap = ({ user }) => {
 
             <div className="flex-1 overflow-y-auto pt-16 px-6 pb-6 custom-scrollbar space-y-6 bg-slate-50/50">
               
-              {/* Lịch Ngày Của Bạn Bè (Chỉ hiển thị nếu có task công khai trong ngày hôm nay) */}
               {viewingFriendFeed.daily && viewingFriendFeed.daily.length > 0 && (
                 <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-3xl shadow-sm">
                   <h4 className="text-[11px] font-black text-indigo-500 uppercase mb-3 flex items-center gap-1.5">
@@ -1520,7 +1516,6 @@ const GameRoadmap = ({ user }) => {
                 </div>
               )}
 
-              {/* Lịch Sự Kiện */}
               <div>
                 <h4 className="text-[11px] font-black text-pink-500 uppercase mb-4 flex items-center gap-1.5 ml-2">
                   <span className="text-sm">📅</span> Sự kiện lớn sắp tới
