@@ -104,7 +104,7 @@ const GameRoadmap = ({ user }) => {
     avatar:      "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200",
     background:  "https://images.unsplash.com/photo-1541562232579-512a21360020?q=80&w=800",
     title:       "TỔNG QUAN LỊCH TRÌNH",
-    subtitle:    "v10.5",
+    subtitle:    "v10.6",
     displayName: "Người dùng mới",
     shortId:     "........",
     bio:         "",
@@ -122,9 +122,9 @@ const GameRoadmap = ({ user }) => {
   const [viewingFriendFeed, setViewingFriendFeed] = useState(null);
   const [commentInputs,     setCommentInputs]     = useState({});
   const [replyingTo,        setReplyingTo]        = useState({}); 
+  const [activeReactionId,  setActiveReactionId]  = useState(null); // Giải quyết triệt để lỗi thả cảm xúc trên mobile
   const [isLoading,         setIsLoading]         = useState(true);
 
-  // Auto-scroll logic cho Thông báo
   useEffect(() => {
     if (viewingFriendFeed && targetScrollId) {
       setTimeout(() => {
@@ -539,7 +539,7 @@ const GameRoadmap = ({ user }) => {
     saveToCloud(profile, events, friendsList, dailySchedule, notifications, updated);
   };
 
-  // ── 🔥 BẠN BÈ: GỬI YÊU CẦU & CHẤP NHẬN/TỪ CHỐI & XOÁ BẠN ──
+  // ── BẠN BÈ: GỬI YÊU CẦU & CHẤP NHẬN/TỪ CHỐI & XOÁ BẠN ──
   const handleAddFriend = async (e) => {
     e.preventDefault();
     if (searchFriendId === profile.shortId) { alert("Bạn không thể tự kết bạn với chính mình!"); return; }
@@ -798,6 +798,8 @@ const GameRoadmap = ({ user }) => {
 
   const validNotifs = Array.isArray(notifications) ? notifications.filter(n => n && n.id) : [];
   const unreadNotifs = validNotifs.filter(n => n.read === false).length;
+  // Trích xuất list kết bạn đang chờ (chưa handled)
+  const pendingRequests = validNotifs.filter(n => n.itemType === 'friend_request' && !n.handled);
 
   // ── 9. RENDER ──────────────────────────────────────────────
   if (isLoading) return (
@@ -852,7 +854,7 @@ const GameRoadmap = ({ user }) => {
               )}
             </button>
 
-            {/* THÔNG BÁO (Z-INDEX CAO TỐI ĐA 999) */}
+            {/* THÔNG BÁO */}
             <div className="relative z-[999]">
               <button onClick={markNotifsRead} className="relative flex items-center justify-center w-8 md:w-9 h-8 md:h-9 rounded-xl bg-white border border-pink-200 text-pink-500 shadow-sm hover:scale-105 transition-all cursor-pointer">
                 🔔
@@ -1133,7 +1135,7 @@ const GameRoadmap = ({ user }) => {
       </div>
 
       {/* ════════════════════════════════════════════════════════
-          SETTINGS MODAL
+          SETTINGS MODAL (Z-INDEX 100 ĐỂ NẰM DƯỚI DROP DOWN NOTIF)
       ════════════════════════════════════════════════════════ */}
       {isSettingsOpen && (
         <div className="fixed inset-0 flex items-center justify-center z-[100] p-2 md:p-4" style={{ background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)' }}>
@@ -1479,7 +1481,7 @@ const GameRoadmap = ({ user }) => {
                 </div>
               )}
 
-              {/* ── TAB MỚI: SỰ KIỆN QUAN TRỌNG (SINH NHẬT, KỶ NIỆM) ── */}
+              {/* ── TAB: SỰ KIỆN QUAN TRỌNG (SINH NHẬT, KỶ NIỆM) ── */}
               {activeTab === 'special' && (
                 <div className="space-y-6">
                   <form onSubmit={handleAddSpecialEvent} className="bg-gradient-to-br from-pink-50 to-white p-5 rounded-3xl border border-pink-100 shadow-sm flex flex-col gap-4">
@@ -1547,6 +1549,33 @@ const GameRoadmap = ({ user }) => {
               {/* ── TAB: BẠN BÈ ── */}
               {activeTab === 'friends' && (
                 <div className="space-y-6">
+
+                  {/* 🔥 LỜI MỜI KẾT BẠN (TÁCH RIÊNG TỪ THÔNG BÁO) */}
+                  {pendingRequests.length > 0 && (
+                    <div className="bg-blue-50 border-2 border-blue-200 p-5 rounded-3xl shadow-sm">
+                      <h3 className="text-[12px] font-black uppercase mb-4 text-blue-600 flex items-center gap-2">
+                        <span className="text-lg">👋</span> Lời mời kết bạn đang chờ ({pendingRequests.length})
+                      </h3>
+                      <div className="space-y-3">
+                        {pendingRequests.map(req => (
+                          <div key={req.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-2xl bg-white shadow-sm border border-blue-100">
+                            <div className="flex items-center gap-3">
+                              <img src={req.fromAvatar} alt="" className="w-12 h-12 rounded-full object-cover border-2 border-blue-100 shadow-sm" />
+                              <div>
+                                <div className="text-[14px] font-black text-slate-800">{req.fromName}</div>
+                                <div className="text-[11px] text-slate-500 font-medium">Đã gửi lời mời kết bạn</div>
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                               <button onClick={() => handleAcceptFriend(req)} className="flex-1 sm:flex-none bg-blue-500 text-white px-5 py-2.5 rounded-xl text-[12px] font-black shadow-sm hover:bg-blue-600 transition-colors cursor-pointer">Đồng ý</button>
+                               <button onClick={() => handleRejectFriend(req)} className="flex-1 sm:flex-none bg-slate-100 border border-slate-200 text-slate-600 px-5 py-2.5 rounded-xl text-[12px] font-black shadow-sm hover:bg-slate-200 transition-colors cursor-pointer">Từ chối</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <form onSubmit={handleAddFriend} className="bg-white p-5 rounded-3xl border-[3px] border-pink-100 shadow-sm flex flex-col md:flex-row gap-3 items-end">
                     <div className="flex-1 w-full">
                       <label className="text-[11px] font-black uppercase mb-2 block text-pink-500">Nhập ID bạn bè (8 số)</label>
@@ -1836,7 +1865,7 @@ const GameRoadmap = ({ user }) => {
         </div>
       )}
 
-      {/* CROP MODAL (TÙY CHỈNH TỰ DO HOẶC 21:9) */}
+      {/* CROP MODAL */}
       {isCropModalOpen && upImg && (
         <div className="fixed inset-0 flex flex-col items-center justify-center z-[200] p-4" style={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(15px)' }}>
           <div className="text-center mb-6">
@@ -1921,7 +1950,7 @@ const GameRoadmap = ({ user }) => {
                             {isDone && <span className="text-emerald-500 text-lg font-black mr-2">✔</span>}
                           </div>
                           
-                          {/* FIREBASE CẢM XÚC */}
+                          {/* 🔥 BỘ TƯƠNG TÁC CẢM XÚC THÔNG MINH - MOBILE SAFE */}
                           <div className="flex items-center gap-2 mt-3">
                             {Object.keys(reactionCounts).length > 0 && (
                               <div className="flex gap-1.5 bg-slate-50 px-2 py-1.5 rounded-xl border border-slate-100">
@@ -1934,18 +1963,22 @@ const GameRoadmap = ({ user }) => {
                               </div>
                             )}
                             
-                            <div className="group relative">
-                              <button className={`text-[11px] font-bold px-3 py-1.5 rounded-xl border transition-colors cursor-pointer ${myReaction ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>
+                            <div className="relative">
+                              <button onClick={() => setActiveReactionId(activeReactionId === t.id ? null : t.id)}
+                                className={`text-[11px] font-bold px-3 py-1.5 rounded-xl border transition-colors cursor-pointer ${myReaction ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>
                                 {myReaction ? `${myReaction} Đã thả` : '🤍 Thả cảm xúc'}
                               </button>
-                              <div className="absolute bottom-full left-0 mb-2 hidden group-hover:flex bg-white shadow-xl border border-slate-100 rounded-full p-1.5 gap-1 z-10">
-                                {REACTIONS.map(emo => (
-                                  <button key={emo} onClick={() => handleInteract(viewingFriendFeed.uid, t.id, 'daily', 'reaction', emo, null, viewingFriendFeed.viewDate)}
-                                    className="text-lg hover:scale-125 transition-transform cursor-pointer px-1">
-                                    {emo}
-                                  </button>
-                                ))}
-                              </div>
+                              
+                              {activeReactionId === t.id && (
+                                <div className="absolute bottom-full left-0 mb-2 flex bg-white shadow-[0_10px_40px_rgba(0,0,0,0.2)] border border-slate-200 rounded-full p-2 gap-1.5 z-50">
+                                  {REACTIONS.map(emo => (
+                                    <button key={emo} onClick={() => { handleInteract(viewingFriendFeed.uid, t.id, 'daily', 'reaction', emo, null, viewingFriendFeed.viewDate); setActiveReactionId(null); }}
+                                      className="text-xl hover:scale-125 transition-transform cursor-pointer px-1 active:scale-95">
+                                      {emo}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           </div>
 
@@ -2027,7 +2060,7 @@ const GameRoadmap = ({ user }) => {
                               <p className="mt-3 text-[12px] text-amber-700 font-bold bg-amber-50 p-2.5 rounded-xl border border-amber-100 flex items-center gap-2 shadow-inner"><span className="text-lg">⭐</span> {ev.rewards}</p>
                             )}
 
-                            {/* REACTION BAR EVENT */}
+                            {/* 🔥 BỘ TƯƠNG TÁC CẢM XÚC THÔNG MINH - EVENT */}
                             <div className="flex items-center gap-2 mt-4">
                               {Object.keys(reactionCounts).length > 0 && (
                                 <div className="flex gap-1.5 bg-pink-50 px-2 py-1.5 rounded-xl border border-pink-100">
@@ -2040,18 +2073,22 @@ const GameRoadmap = ({ user }) => {
                                 </div>
                               )}
                               
-                              <div className="group relative">
-                                <button className={`text-[11px] font-bold px-3 py-1.5 rounded-xl border transition-colors cursor-pointer ${myReaction ? 'bg-pink-50 text-pink-600 border-pink-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>
+                              <div className="relative">
+                                <button onClick={() => setActiveReactionId(activeReactionId === ev.id ? null : ev.id)}
+                                  className={`text-[11px] font-bold px-3 py-1.5 rounded-xl border transition-colors cursor-pointer ${myReaction ? 'bg-pink-50 text-pink-600 border-pink-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>
                                   {myReaction ? `${myReaction} Đã thả` : '🤍 Thả cảm xúc'}
                                 </button>
-                                <div className="absolute bottom-full left-0 mb-2 hidden group-hover:flex bg-white shadow-xl border border-slate-100 rounded-full p-1.5 gap-1 z-10">
-                                  {REACTIONS.map(emo => (
-                                    <button key={emo} onClick={() => handleInteract(viewingFriendFeed.uid, ev.id, 'event', 'reaction', emo, null)}
-                                      className="text-lg hover:scale-125 transition-transform cursor-pointer px-1">
-                                      {emo}
-                                    </button>
-                                  ))}
-                                </div>
+                                
+                                {activeReactionId === ev.id && (
+                                  <div className="absolute bottom-full left-0 mb-2 flex bg-white shadow-[0_10px_40px_rgba(0,0,0,0.2)] border border-slate-200 rounded-full p-2 gap-1.5 z-50">
+                                    {REACTIONS.map(emo => (
+                                      <button key={emo} onClick={() => { handleInteract(viewingFriendFeed.uid, ev.id, 'event', 'reaction', emo, null); setActiveReactionId(null); }}
+                                        className="text-xl hover:scale-125 transition-transform cursor-pointer px-1 active:scale-95">
+                                        {emo}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
                             </div>
 
