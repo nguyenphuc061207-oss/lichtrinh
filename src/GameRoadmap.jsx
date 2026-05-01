@@ -221,6 +221,10 @@ const GameRoadmap = ({ user }) => {
   // ── 5. SETTINGS MODAL STATE ────────────────────────────────
   const [isSettingsOpen,   setIsSettingsOpen]   = useState(false);
   const [activeTab,        setActiveTab]        = useState('profile');
+  
+  // 🔥 DÒNG NÀY ĐÃ ĐƯỢC KHÔI PHỤC LẠI ĐỂ FIX LỖI NÚT CÀI ĐẶT
+  const [profileFormData,  setProfileFormData]  = useState(profile); 
+  
   const [eventFormData,    setEventFormData]    = useState({
     title: '', startDate: '', endDate: '', rewards: '', notes: '',
     category: 'study', status: 'todo', priority: 'medium', progress: 0,
@@ -238,7 +242,7 @@ const GameRoadmap = ({ user }) => {
   });
 
   const checkTaskOnDate = (task, targetDateStr) => {
-    if (!task || !task.startDate) return false; // Lớp khiên bảo vệ
+    if (!task || !task.startDate) return false; 
     const start = new Date(task.startDate); start.setHours(0,0,0,0);
     const target = new Date(targetDateStr); target.setHours(0,0,0,0);
     
@@ -261,7 +265,7 @@ const GameRoadmap = ({ user }) => {
   const filteredDailySchedule = useMemo(() => {
     return dailySchedule
       .filter(t => checkTaskOnDate(t, dailyViewDate))
-      .sort((a, b) => (a.time || "00:00").localeCompare(b.time || "00:00")); // So sánh an toàn
+      .sort((a, b) => (a.time || "00:00").localeCompare(b.time || "00:00")); 
   }, [dailySchedule, dailyViewDate]);
 
   // ── 6. IMAGE CROP ──────────────────────────────────────────
@@ -566,7 +570,7 @@ const GameRoadmap = ({ user }) => {
             </button>
 
             <button onClick={() => { setProfileFormData(profile); setIsSettingsOpen(true); }}
-              className="flex items-center gap-1.5 text-[11px] font-black uppercase px-4 py-2 rounded-xl transition-all shadow-sm hover:scale-105 hover:shadow-md"
+              className="flex items-center gap-1.5 text-[11px] font-black uppercase px-4 py-2 rounded-xl transition-all shadow-sm hover:scale-105 hover:shadow-md cursor-pointer"
               style={{ background: '#ffffff', color: '#db2777', border: '1px solid #fbcfe8' }}>
               ⚙️ Cài đặt
             </button>
