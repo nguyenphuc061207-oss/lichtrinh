@@ -96,6 +96,9 @@ const GameRoadmap = ({ user }) => {
   const [isDailyModalOpen,    setIsDailyModalOpen]    = useState(false);
   const [quickViewDate,       setQuickViewDate]       = useState(todayYMD);
   const [isDeadlineModalOpen, setIsDeadlineModalOpen] = useState(false);
+  
+  // Trạng thái để Auto-scroll khi bấm từ thông báo
+  const [targetScrollId,      setTargetScrollId]      = useState(null);
 
   const generateID = () => Math.floor(10000000 + Math.random() * 90000000).toString();
 
@@ -103,7 +106,7 @@ const GameRoadmap = ({ user }) => {
     avatar:      "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200",
     background:  "https://images.unsplash.com/photo-1541562232579-512a21360020?q=80&w=800",
     title:       "TỔNG QUAN LỊCH TRÌNH",
-    subtitle:    "v9.1",
+    subtitle:    "v9.2",
     displayName: "Người dùng mới",
     shortId:     "........",
     bio:         "",
@@ -123,7 +126,21 @@ const GameRoadmap = ({ user }) => {
   const [replyingTo,        setReplyingTo]        = useState({}); 
   const [isLoading,         setIsLoading]         = useState(true);
 
-  // KHIÊN BẢO VỆ CHỐNG TRẮNG MÀN HÌNH (XỬ LÝ DỮ LIỆU RÁC TỪ FIREBASE)
+  // Auto-scroll logic khi có targetScrollId
+  useEffect(() => {
+    if (viewingFriendFeed && targetScrollId) {
+      setTimeout(() => {
+        const el = document.getElementById(`public-item-${targetScrollId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.classList.add('shadow-[0_0_0_4px_rgba(236,72,153,0.5)]'); // Hiệu ứng sáng viền hồng
+          setTimeout(() => el.classList.remove('shadow-[0_0_0_4px_rgba(236,72,153,0.5)]'), 2000);
+          setTargetScrollId(null);
+        }
+      }, 500); // Đợi modal render
+    }
+  }, [viewingFriendFeed, targetScrollId]);
+
   useEffect(() => {
     if (!user) return;
     const unsub = onSnapshot(doc(db, "users", user.uid), (docSnap) => {
@@ -329,9 +346,10 @@ const GameRoadmap = ({ user }) => {
     reader.addEventListener('load', () => setUpImg(reader.result));
     reader.readAsDataURL(blob);
     setCropTarget(target);
-    if      (target === 'avatar')     { setCropAspectRatio(1/1);     setCrop({ unit: '%', width: 50, aspect: 1/1 }); }
-    else if (target === 'background') { setCropAspectRatio(undefined); setCrop({ unit: '%', width: 80, height: 80 }); }
-    else                              { setCropAspectRatio(21/9);    setCrop({ unit: '%', width: 80, aspect: 21/9 }); }
+    if      (target === 'avatar')     { setCropAspectRatio(1/1);  setCrop({ unit: '%', width: 50, aspect: 1/1 }); }
+    // Thay đổi lại định dạng 21:9 cho ảnh nền để vừa khung banner
+    else if (target === 'background') { setCropAspectRatio(21/9); setCrop({ unit: '%', width: 80, aspect: 21/9 }); }
+    else                              { setCropAspectRatio(21/9); setCrop({ unit: '%', width: 80, aspect: 21/9 }); }
     setIsCropModalOpen(true);
   };
 
@@ -503,7 +521,9 @@ const GameRoadmap = ({ user }) => {
   };
 
   const handleToggleShareDailyTask = (id) => {
-    const updated = dailySchedule.map(t => t.id === id ? { ...t, isShared: !t.isShared } : t);
+    const updated = dailySchedule.map(t => 
+      t.id === id ? { ...t, isShared: !t.isShared } : t
+    );
     setDailySchedule(updated);
     saveToCloud(profile, events, friendsList, updated, notifications, specialEvents);
   };
@@ -579,11 +599,12 @@ const GameRoadmap = ({ user }) => {
           : (replyData ? `đã trả lời bình luận của bạn: "${payload}"` : `đã bình luận: "${payload}"`);
       }
 
+      // Lưu lại postOwnerUid để chuyển hướng chính xác khi click thông báo
       if (targetUid !== user.uid && notifMsgForOwner) {
         notifs.push({
           id: Date.now().toString() + "_1", fromUid: user.uid, fromName: profile.displayName, fromAvatar: profile.avatar,
           text: notifMsgForOwner, read: false, createdAt: new Date().toISOString(),
-          itemId: itemId, itemType: itemType, targetDate: targetViewDate // 🔥 Lưu lại ngày tương tác
+          itemId: itemId, itemType: itemType, targetDate: targetViewDate, postOwnerUid: targetUid
         });
       }
 
@@ -601,7 +622,7 @@ const GameRoadmap = ({ user }) => {
             ruNotifs.push({
                 id: Date.now().toString() + "_2", fromUid: user.uid, fromName: profile.displayName, fromAvatar: profile.avatar,
                 text: `đã trả lời bình luận của bạn: "${payload}"`, read: false, createdAt: new Date().toISOString(),
-                itemId: itemId, itemType: itemType, targetDate: targetViewDate
+                itemId: itemId, itemType: itemType, targetDate: targetViewDate, postOwnerUid: targetUid
             });
             await setDoc(repliedUserRef, { notifications: ruNotifs }, { merge: true });
         }
@@ -621,7 +642,7 @@ const GameRoadmap = ({ user }) => {
     } catch (e) { console.error("Lỗi tương tác:", e); }
   };
 
-  const handleViewFriendFeed = async (friendUid) => {
+  const handleViewFriendFeed = async (friendUid, overrideDate = null) => {
     const fDoc = await getDoc(doc(db, "users", friendUid));
     if (!fDoc.exists()) return;
     const fData = fDoc.data(); let fProfile = fData.profile;
@@ -631,32 +652,35 @@ const GameRoadmap = ({ user }) => {
       ...ev, start: ev.start && ev.start.toDate ? ev.start.toDate() : new Date(ev.start), end: ev.end && ev.end.toDate ? ev.end.toDate() : new Date(ev.end),
     })).sort((a, b) => a.start - b.start);
 
+    const viewDate = overrideDate || todayYMD;
     const sharedDaily = (Array.isArray(fData.dailySchedule) ? fData.dailySchedule : [])
-      .filter(t => t.isShared && checkTaskOnDate(t, todayYMD))
+      .filter(t => t.isShared && checkTaskOnDate(t, viewDate))
       .sort((a, b) => (a.time || "00:00").localeCompare(b.time || "00:00"));
 
-    setViewingFriendFeed({ uid: friendUid, profile: fProfile, events: sharedEvents, daily: sharedDaily, viewDate: todayYMD });
+    setViewingFriendFeed({ uid: friendUid, profile: fProfile, events: sharedEvents, daily: sharedDaily, viewDate: viewDate });
     setIsSettingsOpen(false);
   };
 
-  const handleNotifClick = (notif) => {
+  // 🔥 XỬ LÝ KHI CLICK VÀO THÔNG BÁO -> ĐI ĐẾN TRANG CÔNG KHAI
+  const handleNotifClick = async (notif) => {
     const updated = notifications.map(n => n.id === notif.id ? {...n, read: true} : n);
     setNotifications(updated);
     setDoc(doc(db, "users", user.uid), { notifications: updated }, { merge: true });
     
     setIsNotifOpen(false);
 
-    if (notif.itemType === 'event') {
-      const ev = events.find(e => e.id === notif.itemId);
-      if (ev) setSelectedEventDetail(ev);
-    } else if (notif.itemType === 'daily') {
-      const dl = dailySchedule.find(d => d.id === notif.itemId);
-      if (dl) {
-        // 🔥 Nhảy thẳng đến ngày có tương tác thay vì ngày tạo gốc của Task lặp
-        setQuickViewDate(notif.targetDate || formatDateToYMD(notif.createdAt));
-        setIsDailyModalOpen(true);
-      }
+    // Điểm mấu chốt: Lấy postOwnerUid để chuyển hướng
+    const targetUid = notif.postOwnerUid || user.uid; 
+    let targetDate = todayYMD;
+    
+    if (notif.itemType === 'daily') {
+      targetDate = notif.targetDate || formatDateToYMD(notif.createdAt);
     }
+    
+    await handleViewFriendFeed(targetUid, targetDate);
+    
+    // Yêu cầu màn hình tự động cuộn đến phần tử này
+    setTargetScrollId(notif.itemId);
   };
 
   const markNotifsRead = async () => {
@@ -671,30 +695,12 @@ const GameRoadmap = ({ user }) => {
   const handleLogout = () => signOut(auth).catch(console.error);
 
   // ── 8. HELPERS ─────────────────────────────────────────────
-  const getDaysLeft = (ev) => Math.ceil((ev.end.getTime() - now.getTime()) / 86400000);
   const getEventProgress = (ev) => {
     if (ev.status === 'done') return 100;
     if (ev.status === 'todo') return 0;
     return ev.progress || 0;
   };
 
-  // 🔥 Tính toán Thống kê Sidebar mà không làm sụp app
-  const stats = useMemo(() => {
-    const safeEvents = Array.isArray(events) ? events : [];
-    const total     = safeEvents.length;
-    const done      = safeEvents.filter(e => e.status === 'done').length;
-    const inProg    = safeEvents.filter(e => e.status === 'in-progress').length;
-    const upcoming  = safeEvents.filter(e => e.start && e.start > now).length;
-    const catBreakdown = CATEGORIES.map(c => ({ ...c, count: safeEvents.filter(e => e.category === c.id).length }));
-    return { total, done, inProg, upcoming, catBreakdown };
-  }, [events]);
-
-  const urgentEvents = (Array.isArray(events) ? events : []).filter(ev => { 
-    if(!ev.end) return false;
-    const d = getDaysLeft(ev); 
-    return d >= 0 && d <= 3; 
-  });
-  
   const validNotifs = Array.isArray(notifications) ? notifications.filter(n => n && n.id) : [];
   const unreadNotifs = validNotifs.filter(n => n.read === false).length;
 
@@ -734,23 +740,11 @@ const GameRoadmap = ({ user }) => {
 
           <div className="flex items-center gap-1.5 md:gap-2">
             
-            {/* LỊCH NGÀY (HIỆN TRÊN MOBILE VỚI TEXT RÚT GỌN) */}
+            {/* ĐỔI ICON THÀNH TỜ LỊCH (📅) THEO YÊU CẦU */}
             <button onClick={() => setIsDailyModalOpen(true)}
               className="flex items-center gap-1.5 text-[11px] font-black uppercase px-2.5 md:px-4 py-2 rounded-xl transition-all shadow-sm hover:scale-105 hover:shadow-md cursor-pointer"
               style={{ background: '#e0e7ff', color: '#4f46e5', border: '1px solid #c7d2fe' }}>
-              ⏰ <span className="hidden md:inline">Lịch Ngày</span>
-            </button>
-
-            {/* DEADLINE */}
-            <button onClick={() => setIsDeadlineModalOpen(true)}
-              className="relative flex items-center gap-1.5 text-[11px] font-black uppercase px-2.5 md:px-4 py-2 rounded-xl transition-all shadow-sm hover:scale-105 hover:shadow-md cursor-pointer"
-              style={{ background: urgentEvents.length > 0 ? '#fee2e2' : '#fef3c7', color: urgentEvents.length > 0 ? '#dc2626' : '#d97706', border: `1px solid ${urgentEvents.length > 0 ? '#fecaca' : '#fde68a'}` }}>
-              ⏰ <span className="hidden md:inline">Hạn Chót</span>
-              {urgentEvents.length > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center animate-bounce shadow-md">
-                  {urgentEvents.length}
-                </span>
-              )}
+              📅 <span className="hidden md:inline">Lịch Ngày</span>
             </button>
 
             {/* THÔNG BÁO (Z-INDEX CAO TỐI ĐA 999) */}
@@ -800,7 +794,7 @@ const GameRoadmap = ({ user }) => {
         {/* ═══ BODY ══════════════════════════════════════════════ */}
         <div className="flex flex-1 overflow-hidden gap-3 p-3 bg-slate-50 z-10">
 
-          {/* ── SIDEBAR (GỌN GÀNG - HIỂN THỊ SỰ KIỆN QUAN TRỌNG) ── */}
+          {/* ── SIDEBAR ── */}
           <div className={`w-full md:w-[280px] shrink-0 flex flex-col gap-3 ${showMobileMap ? 'hidden md:flex' : 'flex'}`}>
 
             {/* Profile Card */}
@@ -812,15 +806,17 @@ const GameRoadmap = ({ user }) => {
                 <div className="text-[12px] font-bold mt-0.5 text-pink-600 drop-shadow-md">{profile.subtitle}</div>
                 {profile.bio && <div className="text-[11px] font-medium text-slate-700 mt-1.5 line-clamp-2 bg-white/70 p-1.5 rounded-lg backdrop-blur-md border border-white shadow-sm">{profile.bio}</div>}
               </div>
-              <div className="md:hidden absolute inset-0 flex items-center justify-center bg-white/20 backdrop-blur-sm opacity-0 hover:opacity-100 transition-opacity">
+              
+              {/* SỬA LỖI NÚT MOBILE BỊ MẤT: Xóa bỏ các class hover phức tạp trên mobile */}
+              <div className="md:hidden absolute inset-0 flex items-center justify-center bg-white/10 backdrop-blur-[2px]">
                 <button onClick={() => setShowMobileMap(true)}
-                  className="bg-pink-500 text-white font-black px-6 py-3 rounded-full text-sm shadow-[0_4px_15px_rgba(236,72,153,0.4)] border-2 border-white hover:scale-105 transition-transform cursor-pointer">
+                  className="bg-pink-500 text-white font-black px-6 py-3 rounded-full text-sm shadow-[0_4px_15px_rgba(236,72,153,0.4)] border-2 border-white cursor-pointer active:scale-95">
                   XEM LỊCH TRÌNH 
                 </button>
               </div>
             </div>
 
-            {/* 🔥 SỰ KIỆN QUAN TRỌNG (THAY THẾ BẢNG THỐNG KÊ CŨ) */}
+            {/* 🔥 SỰ KIỆN QUAN TRỌNG */}
             <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar pr-1">
               
               <div className="rounded-2xl p-4 bg-gradient-to-br from-pink-50 to-white shadow-sm border border-pink-100">
@@ -967,8 +963,6 @@ const GameRoadmap = ({ user }) => {
                       const top      = event.trackRow * 76;
                       const cat      = getCat(event.category);
                       const progress = getEventProgress(event);
-                      const daysLeft = getDaysLeft(event);
-                      const isUrgent = daysLeft >= 0 && daysLeft <= 3 && event.status !== 'done';
 
                       return (
                         <div
@@ -976,8 +970,8 @@ const GameRoadmap = ({ user }) => {
                           className="absolute h-[62px] flex items-center z-20 cursor-pointer group transition-all duration-200 hover:-translate-y-0.5 bg-white"
                           style={{
                             left: `${leftPct}%`, width: `${widthPct}%`, minWidth: 'max-content', top: `${top}px`,
-                            border: `2px solid ${isUrgent ? '#f43f5e' : cat.border}`, borderRadius: '16px',
-                            boxShadow: isUrgent ? `0 4px 15px rgba(244,63,94,0.3)` : '0 2px 10px rgba(0,0,0,0.05)',
+                            border: `2px solid ${cat.border}`, borderRadius: '16px',
+                            boxShadow: '0 2px 10px rgba(0,0,0,0.05)',
                           }}>
                           <div className="absolute left-0 top-0 bottom-0 w-2 rounded-l-xl" style={{ background: cat.color }}></div>
                           <div className="w-[72px] md:w-[90px] h-full relative shrink-0 pl-3.5 pr-2 py-1.5">
@@ -988,7 +982,6 @@ const GameRoadmap = ({ user }) => {
                             <div className="flex items-center gap-1.5 mb-1">
                               <span className="text-[10px]">{getPri(event.priority).icon}</span>
                               <span className="text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-wider" style={{ background: cat.bg, color: cat.text, border: `1px solid ${cat.border}` }}>{cat.label}</span>
-                              {isUrgent && <span className="text-[9px] px-2 py-0.5 rounded-full font-black animate-pulse bg-red-100 text-red-600 border border-red-200">🔥 {daysLeft === 0 ? 'Hôm nay!' : `Còn ${daysLeft} ngày`}</span>}
                               {event.isShared && <span className="text-[9px] px-1.5 py-0.5 rounded-full font-black bg-pink-100 text-pink-500 border border-pink-200">📢</span>}
                             </div>
                             <h4 className="font-black text-[13px] truncate text-slate-800" style={{ textDecoration: event.status === 'done' ? 'line-through' : 'none', color: event.status === 'done' ? '#94a3b8' : '#1e293b' }}>{event.title}</h4>
@@ -1003,14 +996,6 @@ const GameRoadmap = ({ user }) => {
                               )}
                             </div>
                           </div>
-                          {event.rewards && (
-                            <div className="hidden md:flex shrink-0 items-center h-[70%] border-l border-slate-100 px-3">
-                              <div className="px-2.5 py-1.5 rounded-xl text-center bg-amber-50 border border-amber-100 shadow-inner">
-                                <div className="text-sm leading-none">🏆</div>
-                                <div className="text-[10px] font-black mt-1 max-w-[80px] truncate text-amber-600">{event.rewards}</div>
-                              </div>
-                            </div>
-                          )}
                         </div>
                       );
                     })}
@@ -1096,7 +1081,7 @@ const GameRoadmap = ({ user }) => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     {[
                       { key: 'avatar',     label: 'Ảnh đại diện (1:1)',  target: 'avatar' },
-                      { key: 'background', label: 'Ảnh nền (Tự do)', target: 'background' }, 
+                      { key: 'background', label: 'Ảnh nền (21:9)', target: 'background' }, // 🔥 Đổi text thành (21:9)
                     ].map(f => (
                       <div key={f.key}>
                         <label className="text-[11px] font-black uppercase mb-2 block text-pink-500">{f.label}</label>
@@ -1369,7 +1354,7 @@ const GameRoadmap = ({ user }) => {
                 </div>
               )}
 
-              {/* ── 🔥 TAB MỚI: SỰ KIỆN QUAN TRỌNG (SINH NHẬT, KỶ NIỆM) ── */}
+              {/* ── TAB MỚI: SỰ KIỆN QUAN TRỌNG (SINH NHẬT, KỶ NIỆM) ── */}
               {activeTab === 'special' && (
                 <div className="space-y-6">
                   <form onSubmit={handleAddSpecialEvent} className="bg-gradient-to-br from-pink-50 to-white p-5 rounded-3xl border border-pink-100 shadow-sm flex flex-col gap-4">
@@ -1485,7 +1470,7 @@ const GameRoadmap = ({ user }) => {
         <div className="fixed inset-0 flex items-center justify-center z-[150] p-4" style={{ background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(10px)' }} onClick={() => setIsDailyModalOpen(false)}>
           <div className="w-full max-w-[600px] max-h-[85vh] rounded-[2rem] overflow-hidden bg-white border-[3px] border-indigo-100 shadow-[0_20px_50px_rgba(79,70,229,0.15)] flex flex-col" onClick={e => e.stopPropagation()}>
             <div className="px-6 py-5 flex items-center justify-between bg-indigo-50 border-b border-indigo-100 shrink-0">
-              <h2 className="font-black text-xl text-indigo-900 flex items-center gap-2"><span>⏰</span> Lịch Trình Trong Ngày</h2>
+              <h2 className="font-black text-xl text-indigo-900 flex items-center gap-2"><span>📅</span> Lịch Trình Trong Ngày</h2>
               <button onClick={() => setIsDailyModalOpen(false)} className="text-slate-400 hover:text-indigo-600 hover:bg-white w-8 h-8 rounded-full flex items-center justify-center font-black transition-all shadow-sm border border-transparent hover:border-indigo-200 cursor-pointer">✕</button>
             </div>
             
@@ -1718,7 +1703,7 @@ const GameRoadmap = ({ user }) => {
         </div>
       )}
 
-      {/* CROP MODAL (TÙY CHỈNH TỰ DO) */}
+      {/* CROP MODAL */}
       {isCropModalOpen && upImg && (
         <div className="fixed inset-0 flex flex-col items-center justify-center z-[200] p-4" style={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(15px)' }}>
           <div className="text-center mb-6">
@@ -1794,7 +1779,7 @@ const GameRoadmap = ({ user }) => {
                       });
 
                       return (
-                        <div key={t.id} className="bg-white rounded-3xl border border-indigo-100 shadow-sm p-4 hover:shadow-md transition-all">
+                        <div key={t.id} id={`public-item-${t.id}`} className="bg-white rounded-3xl border border-indigo-100 shadow-sm p-4 hover:shadow-md transition-all">
                           <div className={`flex items-center gap-3 ${isDone ? 'opacity-60' : ''}`}>
                             <div className={`text-[12px] md:text-[14px] font-black font-mono px-2 py-1 rounded-lg text-center ${isDone ? 'bg-slate-100 text-slate-400' : 'bg-indigo-100 text-indigo-600'}`}>
                               {t.time} {t.endTime && <><br/><span className="text-[9px]">{t.endTime}</span></>}
@@ -1803,7 +1788,6 @@ const GameRoadmap = ({ user }) => {
                             {isDone && <span className="text-emerald-500 text-lg font-black mr-2">✔</span>}
                           </div>
                           
-                          {/* 🔥 BỘ TƯƠNG TÁC CẢM XÚC THÔNG MINH */}
                           <div className="flex items-center gap-2 mt-3">
                             {Object.keys(reactionCounts).length > 0 && (
                               <div className="flex gap-1.5 bg-slate-50 px-2 py-1.5 rounded-xl border border-slate-100">
@@ -1895,7 +1879,7 @@ const GameRoadmap = ({ user }) => {
                       });
 
                       return (
-                        <div key={ev.id} className="relative pl-7">
+                        <div key={ev.id} id={`public-item-${ev.id}`} className="relative pl-7">
                           <div className="absolute -left-[11px] top-4 w-5 h-5 bg-pink-400 rounded-full border-[4px] border-white shadow-md flex items-center justify-center"></div>
                           
                           <div className="bg-white border-2 border-pink-100 rounded-3xl p-4 shadow-sm hover:shadow-md transition-shadow hover:-translate-y-0.5">
@@ -1909,7 +1893,7 @@ const GameRoadmap = ({ user }) => {
                               <p className="mt-3 text-[12px] text-amber-700 font-bold bg-amber-50 p-2.5 rounded-xl border border-amber-100 flex items-center gap-2 shadow-inner"><span className="text-lg">⭐</span> {ev.rewards}</p>
                             )}
 
-                            {/* 🔥 BỘ TƯƠNG TÁC CẢM XÚC THÔNG MINH */}
+                            {/* REACTION BAR EVENT */}
                             <div className="flex items-center gap-2 mt-4">
                               {Object.keys(reactionCounts).length > 0 && (
                                 <div className="flex gap-1.5 bg-pink-50 px-2 py-1.5 rounded-xl border border-pink-100">
@@ -1923,7 +1907,7 @@ const GameRoadmap = ({ user }) => {
                               )}
                               
                               <div className="group relative">
-                                <button className={`text-[11px] font-bold px-3 py-1.5 rounded-xl border transition-colors cursor-pointer ${myReaction ? 'bg-pink-100 text-pink-600 border-pink-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>
+                                <button className={`text-[11px] font-bold px-3 py-1.5 rounded-xl border transition-colors cursor-pointer ${myReaction ? 'bg-pink-50 text-pink-600 border-pink-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>
                                   {myReaction ? `${myReaction} Đã thả` : '🤍 Thả cảm xúc'}
                                 </button>
                                 <div className="absolute bottom-full left-0 mb-2 hidden group-hover:flex bg-white shadow-xl border border-slate-100 rounded-full p-1.5 gap-1 z-10">
