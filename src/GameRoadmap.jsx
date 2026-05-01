@@ -95,6 +95,7 @@ const GameRoadmap = ({ user }) => {
   const [selectedEventDetail, setSelectedEventDetail] = useState(null);
   const [isDailyModalOpen,    setIsDailyModalOpen]    = useState(false);
   const [quickViewDate,       setQuickViewDate]       = useState(todayYMD);
+  const [isDeadlineModalOpen, setIsDeadlineModalOpen] = useState(false);
 
   const generateID = () => Math.floor(10000000 + Math.random() * 90000000).toString();
 
@@ -102,7 +103,7 @@ const GameRoadmap = ({ user }) => {
     avatar:      "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200",
     background:  "https://images.unsplash.com/photo-1541562232579-512a21360020?q=80&w=800",
     title:       "TỔNG QUAN LỊCH TRÌNH",
-    subtitle:    "v9.0",
+    subtitle:    "v9.1",
     displayName: "Người dùng mới",
     shortId:     "........",
     bio:         "",
@@ -110,7 +111,7 @@ const GameRoadmap = ({ user }) => {
 
   const [events,        setEvents]        = useState([]);
   const [dailySchedule, setDailySchedule] = useState([]);
-  const [specialEvents, setSpecialEvents] = useState([]); // State Mới: Kỷ niệm, Sinh nhật...
+  const [specialEvents, setSpecialEvents] = useState([]);
   const [friendsList,   setFriendsList]   = useState([]);
   const [friendsData,   setFriendsData]   = useState([]);
   const [notifications, setNotifications] = useState([]);
@@ -122,6 +123,7 @@ const GameRoadmap = ({ user }) => {
   const [replyingTo,        setReplyingTo]        = useState({}); 
   const [isLoading,         setIsLoading]         = useState(true);
 
+  // KHIÊN BẢO VỆ CHỐNG TRẮNG MÀN HÌNH (XỬ LÝ DỮ LIỆU RÁC TỪ FIREBASE)
   useEffect(() => {
     if (!user) return;
     const unsub = onSnapshot(doc(db, "users", user.uid), (docSnap) => {
@@ -136,11 +138,11 @@ const GameRoadmap = ({ user }) => {
         
         if (needsSave) setDoc(doc(db, "users", user.uid), { profile: loadedProfile }, { merge: true });
         
-        if (data.events) {
+        if (Array.isArray(data.events)) {
           setEvents(data.events.map(ev => ({
             ...ev,
-            start:    ev.start.toDate ? ev.start.toDate() : new Date(ev.start),
-            end:      ev.end.toDate   ? ev.end.toDate()   : new Date(ev.end),
+            start:    ev.start && ev.start.toDate ? ev.start.toDate() : new Date(ev.start || Date.now()),
+            end:      ev.end && ev.end.toDate   ? ev.end.toDate()   : new Date(ev.end || Date.now()),
             isShared: ev.isShared || false,
             category: ev.category || 'other',
             status:   ev.status   || 'todo',
@@ -148,34 +150,37 @@ const GameRoadmap = ({ user }) => {
             progress: ev.progress ?? 0,
             notes:    ev.notes    || '',
             reactions: ev.reactions || {},
-            comments: ev.comments || []
+            comments: Array.isArray(ev.comments) ? ev.comments : []
           })));
-        }
+        } else setEvents([]);
         
-        if (data.dailySchedule) {
-          const patchedDaily = data.dailySchedule.map(t => ({
+        if (Array.isArray(data.dailySchedule)) {
+          setDailySchedule(data.dailySchedule.map(t => ({
             ...t,
             startDate: t.startDate || todayYMD,
             time: t.time || "00:00",
             endTime: t.endTime || "",
             repeat: t.repeat || 'none',
             customDays: t.customDays || 1,
-            completedDates: t.completedDates || (t.isDone ? [todayYMD] : []),
+            completedDates: Array.isArray(t.completedDates) ? t.completedDates : (t.isDone ? [todayYMD] : []),
             isShared: t.isShared || false,
             reactions: t.reactions || {},
-            comments: t.comments || []
-          }));
-          setDailySchedule(patchedDaily);
-        }
+            comments: Array.isArray(t.comments) ? t.comments : []
+          })));
+        } else setDailySchedule([]);
 
-        if (data.specialEvents) setSpecialEvents(data.specialEvents);
-        if (data.friends) setFriendsList(data.friends);
-        if (data.notifications) setNotifications(data.notifications.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)));
+        if (Array.isArray(data.specialEvents)) setSpecialEvents(data.specialEvents); else setSpecialEvents([]);
+        if (Array.isArray(data.friends)) setFriendsList(data.friends); else setFriendsList([]);
+        
+        if (Array.isArray(data.notifications)) {
+            const validNotifs = data.notifications.filter(n => n && n.id);
+            setNotifications(validNotifs.sort((a,b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)));
+        } else setNotifications([]);
 
       } else {
         const newProfile = { ...profile, shortId: generateID() };
         setProfile(newProfile);
-        saveToCloud(newProfile, events, [], [], [], []);
+        saveToCloud(newProfile, [], [], [], [], []);
       }
       setIsLoading(false);
     });
@@ -200,7 +205,7 @@ const GameRoadmap = ({ user }) => {
     fetchFriendsData();
   }, [friendsList]);
 
-  const saveToCloud = async (newProfile, newEvents, newFriends = friendsList, newDaily = dailySchedule, newNotifs = notifications, newSpecials = specialEvents) => {
+  const saveToCloud = async (newProfile, newEvents = events, newFriends = friendsList, newDaily = dailySchedule, newNotifs = notifications, newSpecials = specialEvents) => {
     if (!user) return;
     try {
       await setDoc(doc(db, "users", user.uid), { 
@@ -218,7 +223,7 @@ const GameRoadmap = ({ user }) => {
   const filteredEvents = useMemo(() => events.filter(ev => {
     const matchCat   = filterCat  === 'all' || ev.category === filterCat;
     const matchStat  = filterStat === 'all' || ev.status   === filterStat;
-    const matchSearch = !searchQuery || ev.title.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchSearch = !searchQuery || (ev.title || "").toLowerCase().includes(searchQuery.toLowerCase());
     return matchCat && matchStat && matchSearch;
   }), [events, filterCat, filterStat, searchQuery]);
 
@@ -245,7 +250,7 @@ const GameRoadmap = ({ user }) => {
   };
 
   const uniqueScheduledDates = useMemo(() => {
-    const dates = new Set(dailySchedule.map(t => t.startDate).filter(d => d));
+    const dates = new Set(dailySchedule.map(t => t.startDate).filter(Boolean));
     dates.add(todayYMD);
     return Array.from(dates).sort();
   }, [dailySchedule]);
@@ -267,28 +272,24 @@ const GameRoadmap = ({ user }) => {
     let minDiff = Infinity;
 
     specialEvents.forEach(ev => {
+        if(!ev.date) return;
         const d = new Date(ev.date);
+        if(isNaN(d.getTime())) return;
+
         const m = d.getMonth() + 1;
         const day = d.getDate();
 
-        if (m === tMonth && day === tDay) {
-            todayList.push(ev);
-        }
+        if (m === tMonth && day === tDay) todayList.push(ev);
 
-        // Tìm lần xuất hiện tiếp theo
         const nextDate = new Date(td.getFullYear(), m - 1, day);
-        if (nextDate < td && (m !== tMonth || day !== tDay)) {
-            nextDate.setFullYear(td.getFullYear() + 1);
-        }
+        if (nextDate < td && (m !== tMonth || day !== tDay)) nextDate.setFullYear(td.getFullYear() + 1);
 
         const diff = nextDate.getTime() - td.getTime();
-        // Cần tìm event gần nhất trong tương lai (>0)
         if (diff > 0 && diff < minDiff) {
             minDiff = diff;
             nextEvt = { ...ev, nextDate, daysLeft: Math.ceil(diff / (1000 * 3600 * 24)) };
         }
     });
-
     return { todaySpecials: todayList, nextSpecial: nextEvt };
   }, [specialEvents]);
 
@@ -392,11 +393,11 @@ const GameRoadmap = ({ user }) => {
       displayName: profileFormData.displayName,
       avatar:      profileFormData.avatar,
       background:  profileFormData.background,
-      title:       profileFormData.title.toUpperCase(),
-      subtitle:    profileFormData.subtitle.toUpperCase(),
+      title:       (profileFormData.title || "").toUpperCase(),
+      subtitle:    (profileFormData.subtitle || "").toUpperCase(),
       bio:         profileFormData.bio || '',
     };
-    setProfile(upd); saveToCloud(upd, events);
+    setProfile(upd); saveToCloud(upd, events, friendsList, dailySchedule, notifications, specialEvents);
     alert("Cấu hình đã được lưu thành công.");
   };
 
@@ -434,25 +435,25 @@ const GameRoadmap = ({ user }) => {
     };
 
     const updated = [...events, newEvent];
-    setEvents(updated); saveToCloud(profile, updated);
+    setEvents(updated); saveToCloud(profile, updated, friendsList, dailySchedule, notifications, specialEvents);
     setEventFormData({ title: '', startDate: '', endDate: '', rewards: '', notes: '', category: 'study', status: 'todo', priority: 'medium', progress: 0, croppedImage: null });
   };
 
   const handleUpdateEventField = (eventId, field, value) => {
     const updated = events.map(ev => ev.id === eventId ? { ...ev, [field]: value } : ev);
-    setEvents(updated); saveToCloud(profile, updated);
+    setEvents(updated); saveToCloud(profile, updated, friendsList, dailySchedule, notifications, specialEvents);
     setSelectedEventDetail(updated.find(e => e.id === eventId));
   };
 
   const handleDeleteEvent = (id) => {
     const updated = events.filter(e => e.id !== id);
-    setEvents(updated); saveToCloud(profile, updated);
+    setEvents(updated); saveToCloud(profile, updated, friendsList, dailySchedule, notifications, specialEvents);
     setSelectedEventDetail(null);
   };
 
   const handleToggleShareEvent = (eventId) => {
     const updated = events.map(ev => ev.id === eventId ? { ...ev, isShared: !ev.isShared } : ev);
-    setEvents(updated); saveToCloud(profile, updated);
+    setEvents(updated); saveToCloud(profile, updated, friendsList, dailySchedule, notifications, specialEvents);
     setSelectedEventDetail(updated.find(e => e.id === eventId));
   };
 
@@ -476,14 +477,14 @@ const GameRoadmap = ({ user }) => {
     
     const updated = [...dailySchedule, newTask];
     setDailySchedule(updated);
-    saveToCloud(profile, events, friendsList, updated);
+    saveToCloud(profile, events, friendsList, updated, notifications, specialEvents);
     setDailyForm(p => ({ ...p, time: '', endTime: '', task: '' }));
   };
 
   const handleToggleDailyTask = (id, targetDateStr) => {
     const updated = dailySchedule.map(t => {
       if (t.id === id) {
-        const isCompleted = t.completedDates?.includes(targetDateStr);
+        const isCompleted = (t.completedDates || []).includes(targetDateStr);
         const newCompleted = isCompleted 
           ? (t.completedDates || []).filter(d => d !== targetDateStr)
           : [...(t.completedDates || []), targetDateStr];
@@ -492,33 +493,26 @@ const GameRoadmap = ({ user }) => {
       return t;
     });
     setDailySchedule(updated);
-    saveToCloud(profile, events, friendsList, updated);
+    saveToCloud(profile, events, friendsList, updated, notifications, specialEvents);
   };
 
   const handleDeleteDailyTask = (id) => {
     const updated = dailySchedule.filter(t => t.id !== id);
     setDailySchedule(updated);
-    saveToCloud(profile, events, friendsList, updated);
+    saveToCloud(profile, events, friendsList, updated, notifications, specialEvents);
   };
 
   const handleToggleShareDailyTask = (id) => {
-    const updated = dailySchedule.map(t => 
-      t.id === id ? { ...t, isShared: !t.isShared } : t
-    );
+    const updated = dailySchedule.map(t => t.id === id ? { ...t, isShared: !t.isShared } : t);
     setDailySchedule(updated);
-    saveToCloud(profile, events, friendsList, updated);
+    saveToCloud(profile, events, friendsList, updated, notifications, specialEvents);
   };
 
   // ── HANDLERS CHO SỰ KIỆN ĐẶC BIỆT ──
   const handleAddSpecialEvent = (e) => {
     e.preventDefault();
     if (!specialForm.title || !specialForm.date) return;
-    const newEvt = {
-      id: "sp_" + Date.now(),
-      title: specialForm.title,
-      date: specialForm.date,
-      type: specialForm.type
-    };
+    const newEvt = { id: "sp_" + Date.now(), title: specialForm.title, date: specialForm.date, type: specialForm.type };
     const updated = [...specialEvents, newEvt].sort((a,b) => new Date(a.date) - new Date(b.date));
     setSpecialEvents(updated);
     saveToCloud(profile, events, friendsList, dailySchedule, notifications, updated);
@@ -541,12 +535,12 @@ const GameRoadmap = ({ user }) => {
     if (snap.empty) { alert("Không tìm thấy người dùng này trên hệ thống!"); return; }
     let foundUid = ""; snap.forEach(d => { foundUid = d.id; });
     const newList = [...friendsList, foundUid];
-    setFriendsList(newList); saveToCloud(profile, events, newList); setSearchFriendId('');
+    setFriendsList(newList); saveToCloud(profile, events, newList, dailySchedule, notifications, specialEvents); setSearchFriendId('');
     alert("✅ Kết bạn thành công!");
   };
 
   // ── TƯƠNG TÁC: CẢM XÚC, BÌNH LUẬN & TRẢ LỜI ──
-  const handleInteract = async (targetUid, itemId, itemType, actionType, payload, replyData = null) => {
+  const handleInteract = async (targetUid, itemId, itemType, actionType, payload, replyData = null, targetViewDate = null) => {
     if(!user) return;
     try {
       const docRef = doc(db, "users", targetUid);
@@ -554,33 +548,27 @@ const GameRoadmap = ({ user }) => {
       if (!docSnap.exists()) return;
       const d = docSnap.data();
       
-      const targetList = itemType === 'event' ? (d.events || []) : (d.dailySchedule || []);
+      const targetList = Array.isArray(d[itemType === 'event' ? 'events' : 'dailySchedule']) ? d[itemType === 'event' ? 'events' : 'dailySchedule'] : [];
       const itemIndex = targetList.findIndex(x => x.id === itemId);
       if (itemIndex === -1) return;
 
       const item = targetList[itemIndex];
-      let notifs = d.notifications || [];
+      let notifs = Array.isArray(d.notifications) ? d.notifications : [];
       let notifMsgForOwner = "";
 
       if (actionType === 'reaction') {
         if (!item.reactions) item.reactions = {};
-        if (item.reactions[user.uid] === payload) {
-          delete item.reactions[user.uid];
-        } else {
+        if (item.reactions[user.uid] === payload) delete item.reactions[user.uid];
+        else {
           item.reactions[user.uid] = payload;
           notifMsgForOwner = `đã thả ${payload} vào lịch trình của bạn.`;
         }
       } else if (actionType === 'comment') {
         if (!item.comments) item.comments = [];
         item.comments.push({
-          id: Date.now().toString(),
-          uid: user.uid,
-          displayName: profile.displayName,
-          avatar: profile.avatar,
-          text: payload,
-          createdAt: new Date().toISOString(),
-          replyToUid: replyData ? replyData.uid : null,
-          replyToName: replyData ? replyData.displayName : null
+          id: Date.now().toString(), uid: user.uid, displayName: profile.displayName, avatar: profile.avatar,
+          text: payload, createdAt: new Date().toISOString(),
+          replyToUid: replyData ? replyData.uid : null, replyToName: replyData ? replyData.displayName : null
         });
 
         setCommentInputs(p => ({ ...p, [itemId]: '' })); 
@@ -593,15 +581,9 @@ const GameRoadmap = ({ user }) => {
 
       if (targetUid !== user.uid && notifMsgForOwner) {
         notifs.push({
-          id: Date.now().toString() + "_1",
-          fromUid: user.uid,
-          fromName: profile.displayName,
-          fromAvatar: profile.avatar,
-          text: notifMsgForOwner,
-          read: false,
-          createdAt: new Date().toISOString(),
-          itemId: itemId,       
-          itemType: itemType    
+          id: Date.now().toString() + "_1", fromUid: user.uid, fromName: profile.displayName, fromAvatar: profile.avatar,
+          text: notifMsgForOwner, read: false, createdAt: new Date().toISOString(),
+          itemId: itemId, itemType: itemType, targetDate: targetViewDate // 🔥 Lưu lại ngày tương tác
         });
       }
 
@@ -615,17 +597,11 @@ const GameRoadmap = ({ user }) => {
         const repliedUserSnap = await getDoc(repliedUserRef);
         if (repliedUserSnap.exists()) {
             const ruData = repliedUserSnap.data();
-            const ruNotifs = ruData.notifications || [];
+            const ruNotifs = Array.isArray(ruData.notifications) ? ruData.notifications : [];
             ruNotifs.push({
-                id: Date.now().toString() + "_2",
-                fromUid: user.uid,
-                fromName: profile.displayName,
-                fromAvatar: profile.avatar,
-                text: `đã trả lời bình luận của bạn: "${payload}"`,
-                read: false,
-                createdAt: new Date().toISOString(),
-                itemId: itemId,
-                itemType: itemType
+                id: Date.now().toString() + "_2", fromUid: user.uid, fromName: profile.displayName, fromAvatar: profile.avatar,
+                text: `đã trả lời bình luận của bạn: "${payload}"`, read: false, createdAt: new Date().toISOString(),
+                itemId: itemId, itemType: itemType, targetDate: targetViewDate
             });
             await setDoc(repliedUserRef, { notifications: ruNotifs }, { merge: true });
         }
@@ -651,27 +627,18 @@ const GameRoadmap = ({ user }) => {
     const fData = fDoc.data(); let fProfile = fData.profile;
     if (!fProfile.background) fProfile.background = fProfile.avatar;
     
-    const sharedEvents = (fData.events || []).filter(ev => ev.isShared).map(ev => ({
-      ...ev,
-      start: ev.start.toDate ? ev.start.toDate() : new Date(ev.start),
-      end:   ev.end.toDate   ? ev.end.toDate()   : new Date(ev.end),
+    const sharedEvents = (Array.isArray(fData.events) ? fData.events : []).filter(ev => ev.isShared).map(ev => ({
+      ...ev, start: ev.start && ev.start.toDate ? ev.start.toDate() : new Date(ev.start), end: ev.end && ev.end.toDate ? ev.end.toDate() : new Date(ev.end),
     })).sort((a, b) => a.start - b.start);
 
-    const sharedDaily = (fData.dailySchedule || [])
+    const sharedDaily = (Array.isArray(fData.dailySchedule) ? fData.dailySchedule : [])
       .filter(t => t.isShared && checkTaskOnDate(t, todayYMD))
       .sort((a, b) => (a.time || "00:00").localeCompare(b.time || "00:00"));
 
-    setViewingFriendFeed({
-      uid: friendUid,
-      profile: fProfile,
-      events: sharedEvents,
-      daily: sharedDaily,
-      viewDate: todayYMD
-    });
+    setViewingFriendFeed({ uid: friendUid, profile: fProfile, events: sharedEvents, daily: sharedDaily, viewDate: todayYMD });
     setIsSettingsOpen(false);
   };
 
-  // 🔥 Xử lý click vào Thông báo
   const handleNotifClick = (notif) => {
     const updated = notifications.map(n => n.id === notif.id ? {...n, read: true} : n);
     setNotifications(updated);
@@ -685,9 +652,8 @@ const GameRoadmap = ({ user }) => {
     } else if (notif.itemType === 'daily') {
       const dl = dailySchedule.find(d => d.id === notif.itemId);
       if (dl) {
-        // Lấy ngày tương tác thay vì ngày gốc của task lặp
-        const interactDate = formatDateToYMD(notif.createdAt);
-        setQuickViewDate(interactDate);
+        // 🔥 Nhảy thẳng đến ngày có tương tác thay vì ngày tạo gốc của Task lặp
+        setQuickViewDate(notif.targetDate || formatDateToYMD(notif.createdAt));
         setIsDailyModalOpen(true);
       }
     }
@@ -705,13 +671,32 @@ const GameRoadmap = ({ user }) => {
   const handleLogout = () => signOut(auth).catch(console.error);
 
   // ── 8. HELPERS ─────────────────────────────────────────────
+  const getDaysLeft = (ev) => Math.ceil((ev.end.getTime() - now.getTime()) / 86400000);
   const getEventProgress = (ev) => {
     if (ev.status === 'done') return 100;
     if (ev.status === 'todo') return 0;
     return ev.progress || 0;
   };
 
-  const unreadNotifs = notifications.filter(n => n && n.read === false).length;
+  // 🔥 Tính toán Thống kê Sidebar mà không làm sụp app
+  const stats = useMemo(() => {
+    const safeEvents = Array.isArray(events) ? events : [];
+    const total     = safeEvents.length;
+    const done      = safeEvents.filter(e => e.status === 'done').length;
+    const inProg    = safeEvents.filter(e => e.status === 'in-progress').length;
+    const upcoming  = safeEvents.filter(e => e.start && e.start > now).length;
+    const catBreakdown = CATEGORIES.map(c => ({ ...c, count: safeEvents.filter(e => e.category === c.id).length }));
+    return { total, done, inProg, upcoming, catBreakdown };
+  }, [events]);
+
+  const urgentEvents = (Array.isArray(events) ? events : []).filter(ev => { 
+    if(!ev.end) return false;
+    const d = getDaysLeft(ev); 
+    return d >= 0 && d <= 3; 
+  });
+  
+  const validNotifs = Array.isArray(notifications) ? notifications.filter(n => n && n.id) : [];
+  const unreadNotifs = validNotifs.filter(n => n.read === false).length;
 
   // ── 9. RENDER ──────────────────────────────────────────────
   if (isLoading) return (
@@ -734,7 +719,6 @@ const GameRoadmap = ({ user }) => {
         <div className="h-16 flex items-center justify-between px-4 border-b shrink-0 shadow-sm z-40 relative"
           style={{ background: 'linear-gradient(90deg, #fce7f3, #e0e7ff)', borderColor: '#fbcfe8' }}>
 
-          {/* LEFT — Avatar + Name */}
           <div className="flex items-center gap-3">
             <div className="relative">
               <img src={profile.avatar} alt="avatar"
@@ -748,17 +732,28 @@ const GameRoadmap = ({ user }) => {
             </div>
           </div>
 
-          {/* RIGHT — Action Buttons */}
           <div className="flex items-center gap-1.5 md:gap-2">
             
-            {/* LỊCH NGÀY */}
+            {/* LỊCH NGÀY (HIỆN TRÊN MOBILE VỚI TEXT RÚT GỌN) */}
             <button onClick={() => setIsDailyModalOpen(true)}
               className="flex items-center gap-1.5 text-[11px] font-black uppercase px-2.5 md:px-4 py-2 rounded-xl transition-all shadow-sm hover:scale-105 hover:shadow-md cursor-pointer"
               style={{ background: '#e0e7ff', color: '#4f46e5', border: '1px solid #c7d2fe' }}>
               ⏰ <span className="hidden md:inline">Lịch Ngày</span>
             </button>
 
-            {/* THÔNG BÁO */}
+            {/* DEADLINE */}
+            <button onClick={() => setIsDeadlineModalOpen(true)}
+              className="relative flex items-center gap-1.5 text-[11px] font-black uppercase px-2.5 md:px-4 py-2 rounded-xl transition-all shadow-sm hover:scale-105 hover:shadow-md cursor-pointer"
+              style={{ background: urgentEvents.length > 0 ? '#fee2e2' : '#fef3c7', color: urgentEvents.length > 0 ? '#dc2626' : '#d97706', border: `1px solid ${urgentEvents.length > 0 ? '#fecaca' : '#fde68a'}` }}>
+              ⏰ <span className="hidden md:inline">Hạn Chót</span>
+              {urgentEvents.length > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center animate-bounce shadow-md">
+                  {urgentEvents.length}
+                </span>
+              )}
+            </button>
+
+            {/* THÔNG BÁO (Z-INDEX CAO TỐI ĐA 999) */}
             <div className="relative">
               <button onClick={markNotifsRead} className="relative flex items-center justify-center w-8 md:w-9 h-8 md:h-9 rounded-xl bg-white border border-pink-200 text-pink-500 shadow-sm hover:scale-105 transition-all cursor-pointer">
                 🔔
@@ -766,14 +761,14 @@ const GameRoadmap = ({ user }) => {
               </button>
               
               {isNotifOpen && (
-                <div className="absolute top-12 right-0 w-72 md:w-80 bg-white border-2 border-pink-100 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] z-[60] overflow-hidden flex flex-col">
+                <div className="absolute top-12 right-0 w-72 md:w-80 bg-white border-2 border-pink-100 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] z-[999] overflow-hidden flex flex-col">
                   <div className="bg-pink-50 px-4 py-2.5 text-[12px] font-black text-pink-600 border-b border-pink-100 flex justify-between items-center">
                     <span>Thông báo của bạn</span>
                     {unreadNotifs > 0 && <span className="bg-pink-200 text-pink-700 px-2 py-0.5 rounded-full text-[9px]">{unreadNotifs} Mới</span>}
                   </div>
                   <div className="max-h-72 overflow-y-auto custom-scrollbar p-2 space-y-1">
-                    {notifications.length === 0 ? <div className="text-[12px] text-center text-slate-400 p-6 font-bold">Chưa có thông báo nào.</div> :
-                     notifications.map(n => (
+                    {validNotifs.length === 0 ? <div className="text-[12px] text-center text-slate-400 p-6 font-bold">Chưa có thông báo nào.</div> :
+                     validNotifs.map(n => (
                        <div key={n.id} onClick={() => handleNotifClick(n)} className={`flex gap-3 p-2.5 rounded-xl transition-colors cursor-pointer border ${n.read ? 'bg-white border-transparent hover:bg-slate-50' : 'bg-pink-50/50 border-pink-100 hover:bg-pink-50'}`}>
                          <img src={n.fromAvatar} alt="" className="w-10 h-10 rounded-full object-cover border border-slate-200 shrink-0 shadow-sm"/>
                          <div className="text-[12px] text-slate-600 leading-snug flex-1">
@@ -788,14 +783,12 @@ const GameRoadmap = ({ user }) => {
               )}
             </div>
 
-            {/* CÀI ĐẶT */}
             <button onClick={() => { setProfileFormData(profile); setIsSettingsOpen(true); }}
               className="flex items-center gap-1.5 text-[11px] font-black uppercase px-2.5 md:px-4 py-2 md:py-2.5 rounded-xl transition-all shadow-sm hover:scale-105 hover:shadow-md cursor-pointer"
               style={{ background: '#ffffff', color: '#db2777', border: '1px solid #fbcfe8' }}>
               ⚙️ <span className="hidden md:inline">Cài đặt</span>
             </button>
 
-            {/* LOGOUT */}
             <button onClick={handleLogout}
               className="flex items-center justify-center w-8 md:w-9 h-8 md:h-9 rounded-xl transition-all shadow-sm hover:scale-105 cursor-pointer text-lg"
               style={{ background: '#fee2e2', color: '#ef4444', border: '1px solid #fecaca' }}>
@@ -807,7 +800,7 @@ const GameRoadmap = ({ user }) => {
         {/* ═══ BODY ══════════════════════════════════════════════ */}
         <div className="flex flex-1 overflow-hidden gap-3 p-3 bg-slate-50 z-10">
 
-          {/* ── SIDEBAR (ĐÃ LÀM MỚI THEO YÊU CẦU) ────────────────── */}
+          {/* ── SIDEBAR (GỌN GÀNG - HIỂN THỊ SỰ KIỆN QUAN TRỌNG) ── */}
           <div className={`w-full md:w-[280px] shrink-0 flex flex-col gap-3 ${showMobileMap ? 'hidden md:flex' : 'flex'}`}>
 
             {/* Profile Card */}
@@ -830,7 +823,6 @@ const GameRoadmap = ({ user }) => {
             {/* 🔥 SỰ KIỆN QUAN TRỌNG (THAY THẾ BẢNG THỐNG KÊ CŨ) */}
             <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar pr-1">
               
-              {/* Sự Kiện Hôm Nay */}
               <div className="rounded-2xl p-4 bg-gradient-to-br from-pink-50 to-white shadow-sm border border-pink-100">
                 <div className="text-[11px] font-black text-pink-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
                   <span className="text-sm">🎈</span> Sự Kiện Hôm Nay
@@ -854,7 +846,6 @@ const GameRoadmap = ({ user }) => {
                 )}
               </div>
 
-              {/* Sự Kiện Sắp Tới */}
               <div className="rounded-2xl p-4 bg-gradient-to-br from-indigo-50 to-white shadow-sm border border-indigo-100">
                 <div className="text-[11px] font-black text-indigo-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
                   <span className="text-sm">⏳</span> Sự Kiện Sắp Tới
@@ -1032,21 +1023,19 @@ const GameRoadmap = ({ user }) => {
       </div>
 
       {/* ════════════════════════════════════════════════════════
-          SETTINGS MODAL (Z-INDEX 100)
+          SETTINGS MODAL (Z-INDEX 100 ĐỂ NẰM DƯỚI DROP DOWN NOTIF)
       ════════════════════════════════════════════════════════ */}
       {isSettingsOpen && (
         <div className="fixed inset-0 flex items-center justify-center z-[100] p-2 md:p-4" style={{ background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)' }}>
           <div className="w-full max-w-[860px] h-[92vh] md:h-[680px] rounded-[2rem] flex flex-col overflow-hidden relative bg-white border-[3px] border-pink-200 shadow-[0_20px_60px_rgba(236,72,153,0.15)]">
 
-            {/* Modal Header */}
             <div className="h-16 flex items-center justify-between px-4 md:px-6 shrink-0 bg-pink-50 border-b border-pink-100">
-              {/* SỬA LỖI OVERLAP: Thêm overflow-x-auto cho list tab */}
               <div className="flex gap-2 overflow-x-auto custom-scrollbar whitespace-nowrap pr-4">
                 {[
                   { id: 'profile', label: 'Tài Khoản',     icon: '⚙️' },
                   { id: 'events',  label: 'Quản Lý Lịch',  icon: '📅' },
                   { id: 'daily',   label: 'Lịch Ngày',     icon: '⏰' },
-                  { id: 'special', label: 'Sự Kiện',       icon: '🎈' }, // 🔥 TAB MỚI
+                  { id: 'special', label: 'Sự Kiện',       icon: '🎈' }, 
                   { id: 'friends', label: 'Bạn Bè',        icon: '👥' },
                 ].map(tab => (
                   <button key={tab.id} onClick={() => setActiveTab(tab.id)}
@@ -1069,7 +1058,6 @@ const GameRoadmap = ({ user }) => {
               {/* ── TAB: TÀI KHOẢN ── */}
               {activeTab === 'profile' && (
                 <div className="space-y-6">
-                  {/* Preview */}
                   <div className="relative h-32 rounded-3xl overflow-hidden border-[3px] border-white shadow-md bg-white">
                     <img src={profileFormData.background} alt="bg" className="absolute inset-0 w-full h-full object-cover" />
                     <div className="absolute inset-0 bg-gradient-to-r from-white/70 via-white/30 to-transparent"></div>
@@ -1236,27 +1224,27 @@ const GameRoadmap = ({ user }) => {
                 </div>
               )}
 
-              {/* ── TAB: LỊCH TRÌNH TRONG NGÀY ── */}
+              {/* ── TAB: LỊCH TRÌNH TRONG NGÀY (CÀI ĐẶT) ── */}
               {activeTab === 'daily' && (
                 <div className="space-y-6">
                   <div className="flex flex-col sm:flex-row items-center justify-between bg-indigo-50 p-4 rounded-3xl border-2 border-indigo-100 shadow-sm gap-3">
                     <div className="text-[12px] font-black uppercase text-indigo-600">Đang xem lịch ngày:</div>
-                    <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <div className="flex items-center gap-2">
                       <button onClick={() => {
                         const d = new Date(dailyViewDate); d.setDate(d.getDate() - 1);
                         setDailyViewDate(formatDateToYMD(d));
-                      }} className="w-10 h-10 rounded-xl bg-white border border-indigo-200 text-indigo-600 font-black shadow-sm hover:bg-indigo-600 hover:text-white transition-colors cursor-pointer shrink-0">←</button>
+                      }} className="w-10 h-10 rounded-xl bg-white border border-indigo-200 text-indigo-600 font-black shadow-sm hover:bg-indigo-600 hover:text-white transition-colors cursor-pointer">←</button>
                       
                       <input type="date" value={dailyViewDate} onChange={e => setDailyViewDate(e.target.value)}
-                        className="flex-1 px-4 py-2.5 rounded-xl border-2 border-indigo-200 outline-none font-black text-slate-700 bg-white min-w-[140px]" />
+                        className="px-4 py-2.5 rounded-xl border-2 border-indigo-200 outline-none font-black text-slate-700 bg-white" />
                       
                       <button onClick={() => {
                         const d = new Date(dailyViewDate); d.setDate(d.getDate() + 1);
                         setDailyViewDate(formatDateToYMD(d));
-                      }} className="w-10 h-10 rounded-xl bg-white border border-indigo-200 text-indigo-600 font-black shadow-sm hover:bg-indigo-600 hover:text-white transition-colors cursor-pointer shrink-0">→</button>
+                      }} className="w-10 h-10 rounded-xl bg-white border border-indigo-200 text-indigo-600 font-black shadow-sm hover:bg-indigo-600 hover:text-white transition-colors cursor-pointer">→</button>
                     </div>
                     <button onClick={() => setDailyViewDate(todayYMD)} 
-                      className={`w-full sm:w-auto text-[11px] font-black px-4 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer ${dailyViewDate === todayYMD ? 'bg-indigo-600 text-white' : 'bg-white text-indigo-600 border border-indigo-200'}`}>Hôm nay</button>
+                      className={`text-[11px] font-black px-4 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer ${dailyViewDate === todayYMD ? 'bg-indigo-600 text-white' : 'bg-white text-indigo-600 border border-indigo-200'}`}>Hôm nay</button>
                   </div>
 
                   <form onSubmit={handleAddDailyTask} className="bg-white p-5 rounded-3xl border-2 border-slate-100 shadow-sm flex flex-col gap-4">
@@ -1293,7 +1281,7 @@ const GameRoadmap = ({ user }) => {
                           <option value="weekly">Mỗi tuần</option>
                           <option value="biweekly">Mỗi 2 tuần</option>
                           <option value="yearly">Mỗi năm</option>
-                          <option value="custom">Tùy chỉnh</option>
+                          <option value="custom">Tùy chỉnh (Số ngày lặp)</option>
                         </select>
                       </div>
                     </div>
@@ -1369,7 +1357,7 @@ const GameRoadmap = ({ user }) => {
                                 </div>
                               </div>
                               <button onClick={() => handleDeleteDailyTask(item.id)}
-                                className="w-8 h-8 md:w-9 md:h-9 flex items-center justify-center rounded-xl bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-colors border border-red-100 shrink-0 cursor-pointer md:ml-auto">
+                                className="w-8 h-8 md:w-9 md:h-9 flex items-center justify-center rounded-xl bg-red-50 text-red-500 hover:bg-red-50 hover:text-white transition-colors border border-red-100 shrink-0 cursor-pointer md:ml-auto">
                                 ✕
                               </button>
                             </div>
@@ -1556,7 +1544,7 @@ const GameRoadmap = ({ user }) => {
                 ) : (
                   <div className="space-y-3">
                     {quickViewSchedule.map(item => {
-                      const isDone = item.completedDates?.includes(quickViewDate);
+                      const isDone = (item.completedDates || []).includes(quickViewDate);
                       return (
                         <div key={item.id} className={`flex flex-col md:flex-row md:items-center gap-3 md:gap-4 p-3.5 rounded-2xl border-2 transition-all ${isDone ? 'bg-slate-50 border-slate-100 opacity-70' : 'bg-white border-indigo-50 shadow-sm hover:border-indigo-200'}`}>
                           
@@ -1796,8 +1784,15 @@ const GameRoadmap = ({ user }) => {
                 ) : (
                   <div className="space-y-4">
                     {viewingFriendFeed.daily.map(t => {
-                      const isDone = t.completedDates?.includes(viewingFriendFeed.viewDate);
+                      const isDone = (t.completedDates || []).includes(viewingFriendFeed.viewDate);
                       const myReaction = (t.reactions || {})[user?.uid];
+                      
+                      const reactionCounts = {};
+                      REACTIONS.forEach(emo => {
+                        const count = Object.values(t.reactions || {}).filter(r => r === emo).length;
+                        if (count > 0) reactionCounts[emo] = count;
+                      });
+
                       return (
                         <div key={t.id} className="bg-white rounded-3xl border border-indigo-100 shadow-sm p-4 hover:shadow-md transition-all">
                           <div className={`flex items-center gap-3 ${isDone ? 'opacity-60' : ''}`}>
@@ -1808,20 +1803,32 @@ const GameRoadmap = ({ user }) => {
                             {isDone && <span className="text-emerald-500 text-lg font-black mr-2">✔</span>}
                           </div>
                           
-                          {/* REACTION BAR */}
-                          <div className="mt-3 flex flex-wrap gap-2 items-center bg-slate-50 p-2 rounded-xl border border-slate-100">
-                            {REACTIONS.map(emo => {
-                              const count = Object.values(t.reactions || {}).filter(r => r === emo).length;
-                              const isSelected = myReaction === emo;
-                              return (
-                                <button key={emo} onClick={() => handleInteract(viewingFriendFeed.uid, t.id, 'daily', 'reaction', emo)}
-                                  className={`text-[12px] px-2 py-1 rounded-lg transition-all cursor-pointer 
-                                    ${isSelected ? 'bg-indigo-100 border-indigo-300' : 'bg-white border-slate-200'} 
-                                    ${(count === 0 && !isSelected) ? 'opacity-40 grayscale hover:opacity-100 hover:grayscale-0 hover:bg-slate-100' : 'hover:scale-110 border'}`}>
-                                  {emo} {count > 0 && <span className="ml-1 text-[10px] font-black text-indigo-500">{count}</span>}
-                                </button>
-                              )
-                            })}
+                          {/* 🔥 BỘ TƯƠNG TÁC CẢM XÚC THÔNG MINH */}
+                          <div className="flex items-center gap-2 mt-3">
+                            {Object.keys(reactionCounts).length > 0 && (
+                              <div className="flex gap-1.5 bg-slate-50 px-2 py-1.5 rounded-xl border border-slate-100">
+                                {Object.keys(reactionCounts).map(emo => (
+                                  <div key={emo} className="flex items-center gap-0.5 text-[11px] font-black text-slate-600">
+                                    <span>{emo}</span>
+                                    <span className="text-indigo-500">{reactionCounts[emo]}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            
+                            <div className="group relative">
+                              <button className={`text-[11px] font-bold px-3 py-1.5 rounded-xl border transition-colors cursor-pointer ${myReaction ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>
+                                {myReaction ? `${myReaction} Đã thả` : '🤍 Thả cảm xúc'}
+                              </button>
+                              <div className="absolute bottom-full left-0 mb-2 hidden group-hover:flex bg-white shadow-xl border border-slate-100 rounded-full p-1.5 gap-1 z-10">
+                                {REACTIONS.map(emo => (
+                                  <button key={emo} onClick={() => handleInteract(viewingFriendFeed.uid, t.id, 'daily', 'reaction', emo, null, viewingFriendFeed.viewDate)}
+                                    className="text-lg hover:scale-125 transition-transform cursor-pointer px-1">
+                                    {emo}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
                           </div>
 
                           {/* COMMENTS UI */}
@@ -1853,8 +1860,8 @@ const GameRoadmap = ({ user }) => {
                             <div className="flex gap-2">
                               <input type="text" placeholder="Viết bình luận..." value={commentInputs[t.id] || ''} onChange={e => setCommentInputs(p => ({...p, [t.id]: e.target.value}))}
                                 className={`flex-1 bg-slate-50 border border-slate-200 px-3 py-2 text-[12px] font-medium outline-none focus:border-indigo-300 ${replyingTo[t.id] ? 'rounded-b-xl rounded-tr-xl' : 'rounded-xl'}`} 
-                                onKeyDown={e => { if(e.key==='Enter' && commentInputs[t.id]?.trim()){ handleInteract(viewingFriendFeed.uid, t.id, 'daily', 'comment', commentInputs[t.id], replyingTo[t.id]); } }}/>
-                              <button onClick={() => { if(commentInputs[t.id]?.trim()){ handleInteract(viewingFriendFeed.uid, t.id, 'daily', 'comment', commentInputs[t.id], replyingTo[t.id]); } }}
+                                onKeyDown={e => { if(e.key==='Enter' && (commentInputs[t.id] || '').trim()){ handleInteract(viewingFriendFeed.uid, t.id, 'daily', 'comment', commentInputs[t.id], replyingTo[t.id], viewingFriendFeed.viewDate); } }}/>
+                              <button onClick={() => { if((commentInputs[t.id] || '').trim()){ handleInteract(viewingFriendFeed.uid, t.id, 'daily', 'comment', commentInputs[t.id], replyingTo[t.id], viewingFriendFeed.viewDate); } }}
                                 className={`px-4 py-2 bg-indigo-500 text-white text-[11px] font-black hover:bg-indigo-600 transition-colors cursor-pointer shadow-sm ${replyingTo[t.id] ? 'rounded-b-xl rounded-tr-xl' : 'rounded-xl'}`}>Gửi</button>
                             </div>
                           </div>
@@ -1880,6 +1887,13 @@ const GameRoadmap = ({ user }) => {
                     {viewingFriendFeed.events.map(ev => {
                       const cat = getCat(ev.category);
                       const myReaction = (ev.reactions || {})[user?.uid];
+
+                      const reactionCounts = {};
+                      REACTIONS.forEach(emo => {
+                        const count = Object.values(ev.reactions || {}).filter(r => r === emo).length;
+                        if (count > 0) reactionCounts[emo] = count;
+                      });
+
                       return (
                         <div key={ev.id} className="relative pl-7">
                           <div className="absolute -left-[11px] top-4 w-5 h-5 bg-pink-400 rounded-full border-[4px] border-white shadow-md flex items-center justify-center"></div>
@@ -1895,20 +1909,32 @@ const GameRoadmap = ({ user }) => {
                               <p className="mt-3 text-[12px] text-amber-700 font-bold bg-amber-50 p-2.5 rounded-xl border border-amber-100 flex items-center gap-2 shadow-inner"><span className="text-lg">⭐</span> {ev.rewards}</p>
                             )}
 
-                            {/* REACTION BAR EVENT */}
-                            <div className="mt-4 flex flex-wrap gap-2 items-center bg-pink-50 p-2 rounded-xl border border-pink-100">
-                              {REACTIONS.map(emo => {
-                                const count = Object.values(ev.reactions || {}).filter(r => r === emo).length;
-                                const isSelected = myReaction === emo;
-                                return (
-                                  <button key={emo} onClick={() => handleInteract(viewingFriendFeed.uid, ev.id, 'event', 'reaction', emo)}
-                                    className={`text-[12px] px-2 py-1 rounded-lg transition-all cursor-pointer 
-                                      ${isSelected ? 'bg-pink-200 border-pink-300' : 'bg-white border-slate-200'} 
-                                      ${(count === 0 && !isSelected) ? 'opacity-40 grayscale hover:opacity-100 hover:grayscale-0 hover:bg-pink-100' : 'hover:scale-110 border'}`}>
-                                    {emo} {count > 0 && <span className="ml-1 text-[10px] font-black text-pink-500">{count}</span>}
-                                  </button>
-                                )
-                              })}
+                            {/* 🔥 BỘ TƯƠNG TÁC CẢM XÚC THÔNG MINH */}
+                            <div className="flex items-center gap-2 mt-4">
+                              {Object.keys(reactionCounts).length > 0 && (
+                                <div className="flex gap-1.5 bg-pink-50 px-2 py-1.5 rounded-xl border border-pink-100">
+                                  {Object.keys(reactionCounts).map(emo => (
+                                    <div key={emo} className="flex items-center gap-0.5 text-[11px] font-black text-pink-600">
+                                      <span>{emo}</span>
+                                      <span className="text-pink-500">{reactionCounts[emo]}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                              
+                              <div className="group relative">
+                                <button className={`text-[11px] font-bold px-3 py-1.5 rounded-xl border transition-colors cursor-pointer ${myReaction ? 'bg-pink-100 text-pink-600 border-pink-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>
+                                  {myReaction ? `${myReaction} Đã thả` : '🤍 Thả cảm xúc'}
+                                </button>
+                                <div className="absolute bottom-full left-0 mb-2 hidden group-hover:flex bg-white shadow-xl border border-slate-100 rounded-full p-1.5 gap-1 z-10">
+                                  {REACTIONS.map(emo => (
+                                    <button key={emo} onClick={() => handleInteract(viewingFriendFeed.uid, ev.id, 'event', 'reaction', emo, null)}
+                                      className="text-lg hover:scale-125 transition-transform cursor-pointer px-1">
+                                      {emo}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
                             </div>
 
                             {/* COMMENTS EVENT */}
@@ -1940,8 +1966,8 @@ const GameRoadmap = ({ user }) => {
                               <div className="flex gap-2">
                                 <input type="text" placeholder="Viết bình luận..." value={commentInputs[ev.id] || ''} onChange={e => setCommentInputs(p => ({...p, [ev.id]: e.target.value}))}
                                   className={`flex-1 bg-slate-50 border border-slate-200 px-3 py-2 text-[12px] font-medium outline-none focus:border-pink-300 ${replyingTo[ev.id] ? 'rounded-b-xl rounded-tr-xl' : 'rounded-xl'}`} 
-                                  onKeyDown={e => { if(e.key==='Enter' && commentInputs[ev.id]?.trim()){ handleInteract(viewingFriendFeed.uid, ev.id, 'event', 'comment', commentInputs[ev.id], replyingTo[ev.id]); } }}/>
-                                <button onClick={() => { if(commentInputs[ev.id]?.trim()){ handleInteract(viewingFriendFeed.uid, ev.id, 'event', 'comment', commentInputs[ev.id], replyingTo[ev.id]); } }}
+                                  onKeyDown={e => { if(e.key==='Enter' && (commentInputs[ev.id] || '').trim()){ handleInteract(viewingFriendFeed.uid, ev.id, 'event', 'comment', commentInputs[ev.id], replyingTo[ev.id]); } }}/>
+                                <button onClick={() => { if((commentInputs[ev.id] || '').trim()){ handleInteract(viewingFriendFeed.uid, ev.id, 'event', 'comment', commentInputs[ev.id], replyingTo[ev.id]); } }}
                                   className={`px-4 py-2 bg-pink-500 text-white text-[11px] font-black hover:bg-pink-600 transition-colors cursor-pointer shadow-sm ${replyingTo[ev.id] ? 'rounded-b-xl rounded-tr-xl' : 'rounded-xl'}`}>Gửi</button>
                               </div>
                             </div>
