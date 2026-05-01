@@ -96,8 +96,6 @@ const GameRoadmap = ({ user }) => {
   const [isDailyModalOpen,    setIsDailyModalOpen]    = useState(false);
   const [quickViewDate,       setQuickViewDate]       = useState(todayYMD);
   const [isDeadlineModalOpen, setIsDeadlineModalOpen] = useState(false);
-  
-  // Trạng thái để Auto-scroll khi bấm từ thông báo
   const [targetScrollId,      setTargetScrollId]      = useState(null);
 
   const generateID = () => Math.floor(10000000 + Math.random() * 90000000).toString();
@@ -106,7 +104,7 @@ const GameRoadmap = ({ user }) => {
     avatar:      "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200",
     background:  "https://images.unsplash.com/photo-1541562232579-512a21360020?q=80&w=800",
     title:       "TỔNG QUAN LỊCH TRÌNH",
-    subtitle:    "v9.2",
+    subtitle:    "v10.0",
     displayName: "Người dùng mới",
     shortId:     "........",
     bio:         "",
@@ -126,18 +124,18 @@ const GameRoadmap = ({ user }) => {
   const [replyingTo,        setReplyingTo]        = useState({}); 
   const [isLoading,         setIsLoading]         = useState(true);
 
-  // Auto-scroll logic khi có targetScrollId
+  // Auto-scroll logic
   useEffect(() => {
     if (viewingFriendFeed && targetScrollId) {
       setTimeout(() => {
         const el = document.getElementById(`public-item-${targetScrollId}`);
         if (el) {
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          el.classList.add('shadow-[0_0_0_4px_rgba(236,72,153,0.5)]'); // Hiệu ứng sáng viền hồng
+          el.classList.add('shadow-[0_0_0_4px_rgba(236,72,153,0.5)]');
           setTimeout(() => el.classList.remove('shadow-[0_0_0_4px_rgba(236,72,153,0.5)]'), 2000);
           setTargetScrollId(null);
         }
-      }, 500); // Đợi modal render
+      }, 500);
     }
   }, [viewingFriendFeed, targetScrollId]);
 
@@ -347,7 +345,6 @@ const GameRoadmap = ({ user }) => {
     reader.readAsDataURL(blob);
     setCropTarget(target);
     if      (target === 'avatar')     { setCropAspectRatio(1/1);  setCrop({ unit: '%', width: 50, aspect: 1/1 }); }
-    // Thay đổi lại định dạng 21:9 cho ảnh nền để vừa khung banner
     else if (target === 'background') { setCropAspectRatio(21/9); setCrop({ unit: '%', width: 80, aspect: 21/9 }); }
     else                              { setCropAspectRatio(21/9); setCrop({ unit: '%', width: 80, aspect: 21/9 }); }
     setIsCropModalOpen(true);
@@ -521,9 +518,7 @@ const GameRoadmap = ({ user }) => {
   };
 
   const handleToggleShareDailyTask = (id) => {
-    const updated = dailySchedule.map(t => 
-      t.id === id ? { ...t, isShared: !t.isShared } : t
-    );
+    const updated = dailySchedule.map(t => t.id === id ? { ...t, isShared: !t.isShared } : t);
     setDailySchedule(updated);
     saveToCloud(profile, events, friendsList, updated, notifications, specialEvents);
   };
@@ -545,18 +540,96 @@ const GameRoadmap = ({ user }) => {
     saveToCloud(profile, events, friendsList, dailySchedule, notifications, updated);
   };
 
-  // ── BẠN BÈ ──
+  // ── BẠN BÈ MỚI: GỬI LỜI MỜI & XOÁ BẠN ──
   const handleAddFriend = async (e) => {
     e.preventDefault();
     if (searchFriendId === profile.shortId) { alert("Bạn không thể tự kết bạn với chính mình!"); return; }
-    if (friendsList.includes(searchFriendId)) { alert("Người này đã có trong danh sách bạn bè!"); return; }
+
     const q = query(collection(db, "users"), where("profile.shortId", "==", searchFriendId));
     const snap = await getDocs(q);
     if (snap.empty) { alert("Không tìm thấy người dùng này trên hệ thống!"); return; }
-    let foundUid = ""; snap.forEach(d => { foundUid = d.id; });
-    const newList = [...friendsList, foundUid];
-    setFriendsList(newList); saveToCloud(profile, events, newList, dailySchedule, notifications, specialEvents); setSearchFriendId('');
-    alert("✅ Kết bạn thành công!");
+
+    let targetUid = "";
+    let targetData = null;
+    snap.forEach(d => { targetUid = d.id; targetData = d.data(); });
+
+    if (friendsList.includes(targetUid)) { alert("Người này đã là bạn bè của bạn!"); return; }
+
+    const targetNotifs = targetData.notifications || [];
+    const alreadySent = targetNotifs.some(n => n.itemType === 'friend_request' && n.fromUid === user.uid && !n.handled);
+    if (alreadySent) { alert("Bạn đã gửi lời mời rồi, đang chờ đối phương phản hồi!"); return; }
+
+    const newNotif = {
+      id: "fr_" + Date.now(),
+      fromUid: user.uid,
+      fromName: profile.displayName,
+      fromAvatar: profile.avatar,
+      text: "muốn kết bạn với bạn",
+      read: false,
+      createdAt: new Date().toISOString(),
+      itemType: "friend_request",
+      handled: false
+    };
+
+    await setDoc(doc(db, "users", targetUid), { notifications: [...targetNotifs, newNotif] }, { merge: true });
+    setSearchFriendId('');
+    alert("✅ Đã gửi lời mời kết bạn! Vui lòng chờ đối phương xác nhận.");
+  };
+
+  const handleAcceptFriend = async (notif) => {
+    try {
+      // 1. Thêm vào danh sách của mình & đánh dấu đã xử lý
+      const newFriends = [...friendsList, notif.fromUid];
+      const newNotifs = notifications.map(n => n.id === notif.id ? { ...n, handled: true, read: true } : n);
+      setFriendsList(newFriends);
+      setNotifications(newNotifs);
+      await setDoc(doc(db, "users", user.uid), { friends: newFriends, notifications: newNotifs }, { merge: true });
+
+      // 2. Thêm vào danh sách của người kia & Gửi thông báo chấp nhận
+      const targetRef = doc(db, "users", notif.fromUid);
+      const targetSnap = await getDoc(targetRef);
+      if (targetSnap.exists()) {
+        const targetData = targetSnap.data();
+        const targetFriends = targetData.friends || [];
+        const targetNotifs = targetData.notifications || [];
+        if (!targetFriends.includes(user.uid)) targetFriends.push(user.uid);
+        
+        targetNotifs.push({
+          id: "acc_" + Date.now(),
+          fromUid: user.uid,
+          fromName: profile.displayName,
+          fromAvatar: profile.avatar,
+          text: "đã chấp nhận lời mời kết bạn của bạn 🎉",
+          read: false,
+          createdAt: new Date().toISOString(),
+          itemType: "system"
+        });
+        await setDoc(targetRef, { friends: targetFriends, notifications: targetNotifs }, { merge: true });
+      }
+      alert("Đã kết bạn thành công!");
+    } catch(e) { console.error(e); }
+  };
+
+  const handleRejectFriend = async (notif) => {
+    const newNotifs = notifications.map(n => n.id === notif.id ? { ...n, handled: true, read: true } : n);
+    setNotifications(newNotifs);
+    await setDoc(doc(db, "users", user.uid), { notifications: newNotifs }, { merge: true });
+  };
+
+  const handleRemoveFriend = async (friendUid) => {
+    if (!window.confirm("Bạn có chắc chắn muốn hủy kết bạn với người này? Thao tác này không thể hoàn tác.")) return;
+    
+    const newFriends = friendsList.filter(id => id !== friendUid);
+    setFriendsList(newFriends);
+    await setDoc(doc(db, "users", user.uid), { friends: newFriends }, { merge: true });
+
+    const targetRef = doc(db, "users", friendUid);
+    const targetSnap = await getDoc(targetRef);
+    if (targetSnap.exists()) {
+      const targetData = targetSnap.data();
+      const targetFriends = (targetData.friends || []).filter(id => id !== user.uid);
+      await setDoc(targetRef, { friends: targetFriends }, { merge: true });
+    }
   };
 
   // ── TƯƠNG TÁC: CẢM XÚC, BÌNH LUẬN & TRẢ LỜI ──
@@ -599,7 +672,6 @@ const GameRoadmap = ({ user }) => {
           : (replyData ? `đã trả lời bình luận của bạn: "${payload}"` : `đã bình luận: "${payload}"`);
       }
 
-      // Lưu lại postOwnerUid để chuyển hướng chính xác khi click thông báo
       if (targetUid !== user.uid && notifMsgForOwner) {
         notifs.push({
           id: Date.now().toString() + "_1", fromUid: user.uid, fromName: profile.displayName, fromAvatar: profile.avatar,
@@ -643,6 +715,12 @@ const GameRoadmap = ({ user }) => {
   };
 
   const handleViewFriendFeed = async (friendUid, overrideDate = null) => {
+    // 🔥 Bảo mật: Chỉ cho xem nếu là bạn bè hoặc chính mình
+    if (friendUid !== user.uid && !friendsList.includes(friendUid)) {
+      alert("Chỉ bạn bè mới có thể xem trang công khai của nhau!");
+      return;
+    }
+
     const fDoc = await getDoc(doc(db, "users", friendUid));
     if (!fDoc.exists()) return;
     const fData = fDoc.data(); let fProfile = fData.profile;
@@ -661,15 +739,15 @@ const GameRoadmap = ({ user }) => {
     setIsSettingsOpen(false);
   };
 
-  // 🔥 XỬ LÝ KHI CLICK VÀO THÔNG BÁO -> ĐI ĐẾN TRANG CÔNG KHAI
   const handleNotifClick = async (notif) => {
+    if (notif.itemType === 'friend_request') return; // Không điều hướng với loại này
+
     const updated = notifications.map(n => n.id === notif.id ? {...n, read: true} : n);
     setNotifications(updated);
     setDoc(doc(db, "users", user.uid), { notifications: updated }, { merge: true });
     
     setIsNotifOpen(false);
 
-    // Điểm mấu chốt: Lấy postOwnerUid để chuyển hướng
     const targetUid = notif.postOwnerUid || user.uid; 
     let targetDate = todayYMD;
     
@@ -678,8 +756,6 @@ const GameRoadmap = ({ user }) => {
     }
     
     await handleViewFriendFeed(targetUid, targetDate);
-    
-    // Yêu cầu màn hình tự động cuộn đến phần tử này
     setTargetScrollId(notif.itemId);
   };
 
@@ -740,38 +816,69 @@ const GameRoadmap = ({ user }) => {
 
           <div className="flex items-center gap-1.5 md:gap-2">
             
-            {/* ĐỔI ICON THÀNH TỜ LỊCH (📅) THEO YÊU CẦU */}
             <button onClick={() => setIsDailyModalOpen(true)}
               className="flex items-center gap-1.5 text-[11px] font-black uppercase px-2.5 md:px-4 py-2 rounded-xl transition-all shadow-sm hover:scale-105 hover:shadow-md cursor-pointer"
               style={{ background: '#e0e7ff', color: '#4f46e5', border: '1px solid #c7d2fe' }}>
               📅 <span className="hidden md:inline">Lịch Ngày</span>
             </button>
 
+            <button onClick={() => setIsDeadlineModalOpen(true)}
+              className="relative flex items-center gap-1.5 text-[11px] font-black uppercase px-2.5 md:px-4 py-2 rounded-xl transition-all shadow-sm hover:scale-105 hover:shadow-md cursor-pointer"
+              style={{ background: urgentEvents.length > 0 ? '#fee2e2' : '#fef3c7', color: urgentEvents.length > 0 ? '#dc2626' : '#d97706', border: `1px solid ${urgentEvents.length > 0 ? '#fecaca' : '#fde68a'}` }}>
+              ⏰ <span className="hidden md:inline">Hạn Chót</span>
+              {urgentEvents.length > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center animate-bounce shadow-md">
+                  {urgentEvents.length}
+                </span>
+              )}
+            </button>
+
             {/* THÔNG BÁO (Z-INDEX CAO TỐI ĐA 999) */}
-            <div className="relative">
+            <div className="relative z-[999]">
               <button onClick={markNotifsRead} className="relative flex items-center justify-center w-8 md:w-9 h-8 md:h-9 rounded-xl bg-white border border-pink-200 text-pink-500 shadow-sm hover:scale-105 transition-all cursor-pointer">
                 🔔
                 {unreadNotifs > 0 && <span className="absolute -top-1.5 -right-1.5 bg-red-500 rounded-full min-w-[1.25rem] px-1 h-5 text-white text-[10px] font-black flex items-center justify-center shadow-md animate-bounce">{unreadNotifs}</span>}
               </button>
               
               {isNotifOpen && (
-                <div className="absolute top-12 right-0 w-72 md:w-80 bg-white border-2 border-pink-100 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] z-[999] overflow-hidden flex flex-col">
+                <div className="absolute top-12 right-0 w-72 md:w-80 bg-white border-2 border-pink-100 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] overflow-hidden flex flex-col">
                   <div className="bg-pink-50 px-4 py-2.5 text-[12px] font-black text-pink-600 border-b border-pink-100 flex justify-between items-center">
                     <span>Thông báo của bạn</span>
                     {unreadNotifs > 0 && <span className="bg-pink-200 text-pink-700 px-2 py-0.5 rounded-full text-[9px]">{unreadNotifs} Mới</span>}
                   </div>
                   <div className="max-h-72 overflow-y-auto custom-scrollbar p-2 space-y-1">
                     {validNotifs.length === 0 ? <div className="text-[12px] text-center text-slate-400 p-6 font-bold">Chưa có thông báo nào.</div> :
-                     validNotifs.map(n => (
-                       <div key={n.id} onClick={() => handleNotifClick(n)} className={`flex gap-3 p-2.5 rounded-xl transition-colors cursor-pointer border ${n.read ? 'bg-white border-transparent hover:bg-slate-50' : 'bg-pink-50/50 border-pink-100 hover:bg-pink-50'}`}>
-                         <img src={n.fromAvatar} alt="" className="w-10 h-10 rounded-full object-cover border border-slate-200 shrink-0 shadow-sm"/>
-                         <div className="text-[12px] text-slate-600 leading-snug flex-1">
-                           <span className="font-black text-slate-800">{n.fromName}</span> {n.text}
-                           <div className="text-[9px] text-slate-400 font-bold mt-1 uppercase tracking-wider">{new Date(n.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - {new Date(n.createdAt).toLocaleDateString()}</div>
+                     validNotifs.map(n => {
+                       if (n.itemType === 'friend_request') {
+                         return (
+                           <div key={n.id} className="flex flex-col gap-2 p-3 rounded-xl transition-colors bg-blue-50/50 border border-blue-100 mb-1 shadow-sm">
+                             <div className="flex gap-3 items-center">
+                               <img src={n.fromAvatar} alt="" className="w-10 h-10 rounded-full object-cover border border-white shadow-sm shrink-0"/>
+                               <div className="text-[12px] text-slate-600 leading-snug flex-1">
+                                 <span className="font-black text-slate-800">{n.fromName}</span> {n.text}
+                               </div>
+                             </div>
+                             {!n.handled && (
+                               <div className="flex gap-2 ml-12 mt-1">
+                                 <button onClick={(e) => { e.stopPropagation(); handleAcceptFriend(n); }} className="flex-1 bg-blue-500 text-white py-1.5 rounded-lg text-[11px] font-black shadow-sm cursor-pointer hover:bg-blue-600 transition-colors">Đồng ý</button>
+                                 <button onClick={(e) => { e.stopPropagation(); handleRejectFriend(n); }} className="flex-1 bg-white border border-slate-200 text-slate-600 py-1.5 rounded-lg text-[11px] font-black shadow-sm cursor-pointer hover:bg-slate-50 transition-colors">Từ chối</button>
+                               </div>
+                             )}
+                           </div>
+                         );
+                       }
+                       // Thông báo bình thường
+                       return (
+                         <div key={n.id} onClick={() => handleNotifClick(n)} className={`flex gap-3 p-2.5 rounded-xl transition-colors cursor-pointer border ${n.read ? 'bg-white border-transparent hover:bg-slate-50' : 'bg-pink-50/50 border-pink-100 hover:bg-pink-50'}`}>
+                           <img src={n.fromAvatar} alt="" className="w-10 h-10 rounded-full object-cover border border-slate-200 shrink-0 shadow-sm"/>
+                           <div className="text-[12px] text-slate-600 leading-snug flex-1">
+                             <span className="font-black text-slate-800">{n.fromName}</span> {n.text}
+                             <div className="text-[9px] text-slate-400 font-bold mt-1 uppercase tracking-wider">{new Date(n.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - {new Date(n.createdAt).toLocaleDateString()}</div>
+                           </div>
+                           {!n.read && <div className="w-2 h-2 rounded-full bg-pink-500 self-center shrink-0"></div>}
                          </div>
-                         {!n.read && <div className="w-2 h-2 rounded-full bg-pink-500 self-center shrink-0"></div>}
-                       </div>
-                     ))}
+                       )
+                     })}
                   </div>
                 </div>
               )}
@@ -794,21 +901,21 @@ const GameRoadmap = ({ user }) => {
         {/* ═══ BODY ══════════════════════════════════════════════ */}
         <div className="flex flex-1 overflow-hidden gap-3 p-3 bg-slate-50 z-10">
 
-          {/* ── SIDEBAR ── */}
+          {/* ── SIDEBAR (GỌN GÀNG - HIỂN THỊ SỰ KIỆN QUAN TRỌNG) ── */}
           <div className={`w-full md:w-[280px] shrink-0 flex flex-col gap-3 ${showMobileMap ? 'hidden md:flex' : 'flex'}`}>
 
             {/* Profile Card */}
             <div className="relative rounded-2xl overflow-hidden flex-none h-[200px] shadow-sm border-2 border-pink-100 bg-white">
               <img src={profile.background} alt="bg" className="absolute inset-0 w-full h-full object-cover" />
-              <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(255,255,255,1) 0%, rgba(255,255,255,0.1) 60%, transparent 100%)' }}></div>
-              <div className="absolute bottom-0 left-0 right-0 p-4">
-                <div className="text-indigo-900 font-black text-[17px] leading-tight drop-shadow-sm">{profile.title}</div>
-                <div className="text-[12px] font-bold mt-0.5 text-pink-600 drop-shadow-md">{profile.subtitle}</div>
-                {profile.bio && <div className="text-[11px] font-medium text-slate-700 mt-1.5 line-clamp-2 bg-white/70 p-1.5 rounded-lg backdrop-blur-md border border-white shadow-sm">{profile.bio}</div>}
+              {/* Lớp hiển thị nội dung nằm trên cùng, bỏ kính mờ để chữ rõ */}
+              <div className="absolute bottom-0 left-0 right-0 p-4 z-10 pointer-events-none">
+                <div className="text-white font-black text-[17px] leading-tight drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">{profile.title}</div>
+                <div className="text-[12px] font-bold mt-0.5 text-pink-300 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">{profile.subtitle}</div>
+                {profile.bio && <div className="text-[11px] font-medium text-slate-800 mt-1.5 line-clamp-2 bg-white/80 p-1.5 rounded-lg border border-white shadow-sm pointer-events-auto">{profile.bio}</div>}
               </div>
               
-              {/* SỬA LỖI NÚT MOBILE BỊ MẤT: Xóa bỏ các class hover phức tạp trên mobile */}
-              <div className="md:hidden absolute inset-0 flex items-center justify-center bg-white/10 backdrop-blur-[2px]">
+              {/* Nút Xem Lịch Trình Mobile - Được tách riêng để không mờ chữ */}
+              <div className="md:hidden absolute inset-0 flex items-center justify-center bg-black/10 opacity-0 hover:opacity-100 active:opacity-100 transition-opacity z-20">
                 <button onClick={() => setShowMobileMap(true)}
                   className="bg-pink-500 text-white font-black px-6 py-3 rounded-full text-sm shadow-[0_4px_15px_rgba(236,72,153,0.4)] border-2 border-white cursor-pointer active:scale-95">
                   XEM LỊCH TRÌNH 
@@ -1354,7 +1461,7 @@ const GameRoadmap = ({ user }) => {
                 </div>
               )}
 
-              {/* ── TAB MỚI: SỰ KIỆN QUAN TRỌNG (SINH NHẬT, KỶ NIỆM) ── */}
+              {/* ── TAB: SỰ KIỆN QUAN TRỌNG (SINH NHẬT, KỶ NIỆM) ── */}
               {activeTab === 'special' && (
                 <div className="space-y-6">
                   <form onSubmit={handleAddSpecialEvent} className="bg-gradient-to-br from-pink-50 to-white p-5 rounded-3xl border border-pink-100 shadow-sm flex flex-col gap-4">
@@ -1431,7 +1538,7 @@ const GameRoadmap = ({ user }) => {
                     </div>
                     <button type="submit"
                       className="w-full md:w-auto px-8 py-3.5 rounded-2xl font-black text-sm transition-all hover:-translate-y-1 shadow-[0_10px_20px_rgba(236,72,153,0.3)] bg-gradient-to-r from-pink-500 to-rose-500 text-white h-auto cursor-pointer">
-                      👥 THÊM BẠN BÈ
+                      👥 GỬI LỜI MỜI KẾT BẠN
                     </button>
                   </form>
 
@@ -1443,16 +1550,25 @@ const GameRoadmap = ({ user }) => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {friendsData.length === 0 && <div className="col-span-2 text-center py-8 text-[14px] font-bold text-slate-400 bg-white rounded-3xl border-2 border-slate-100 border-dashed">Chưa có bạn bè nào. Đừng ngần ngại chia sẻ ID nhé!</div>}
                     {friendsData.map(friend => (
-                      <div key={friend.uid} className="rounded-2xl p-4 flex items-center gap-4 transition-all bg-white border-2 border-slate-100 shadow-sm hover:border-pink-300 hover:shadow-md">
-                        <img src={friend.avatar} alt="" className="w-14 h-14 rounded-2xl object-cover border-2 border-pink-100 shadow-sm" />
-                        <div className="flex-1 min-w-0">
-                          <div className="font-black text-[15px] text-indigo-900 truncate">{friend.displayName}</div>
-                          <div className="text-[11px] font-black font-mono text-pink-400 mt-0.5">ID: {friend.shortId}</div>
+                      <div key={friend.uid} className="rounded-2xl p-4 flex flex-col md:flex-row md:items-center gap-4 transition-all bg-white border-2 border-slate-100 shadow-sm hover:border-pink-300 hover:shadow-md">
+                        <div className="flex items-center gap-4 flex-1 min-w-0">
+                          <img src={friend.avatar} alt="" className="w-14 h-14 rounded-2xl object-cover border-2 border-pink-100 shadow-sm" />
+                          <div className="flex-1 min-w-0">
+                            <div className="font-black text-[15px] text-indigo-900 truncate">{friend.displayName}</div>
+                            <div className="text-[11px] font-black font-mono text-pink-400 mt-0.5">ID: {friend.shortId}</div>
+                          </div>
                         </div>
-                        <button onClick={() => handleViewFriendFeed(friend.uid)}
-                          className="px-4 py-2 rounded-xl text-[11px] font-black transition-all hover:scale-105 bg-indigo-50 text-indigo-600 border border-indigo-200 uppercase cursor-pointer">
-                          Xem lịch
-                        </button>
+                        <div className="flex items-center gap-2 mt-2 md:mt-0">
+                          <button onClick={() => handleViewFriendFeed(friend.uid)}
+                            className="flex-1 md:flex-none px-4 py-2 rounded-xl text-[11px] font-black transition-all hover:scale-105 bg-indigo-50 text-indigo-600 border border-indigo-200 uppercase cursor-pointer">
+                            Xem lịch
+                          </button>
+                          {/* Nút Hủy Kết Bạn */}
+                          <button onClick={() => handleRemoveFriend(friend.uid)}
+                            className="flex-1 md:flex-none px-4 py-2 rounded-xl text-[11px] font-black transition-all hover:scale-105 bg-red-50 text-red-500 border border-red-200 uppercase cursor-pointer">
+                            Xóa
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -1703,7 +1819,7 @@ const GameRoadmap = ({ user }) => {
         </div>
       )}
 
-      {/* CROP MODAL */}
+      {/* CROP MODAL (TÙY CHỈNH TỰ DO) */}
       {isCropModalOpen && upImg && (
         <div className="fixed inset-0 flex flex-col items-center justify-center z-[200] p-4" style={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(15px)' }}>
           <div className="text-center mb-6">
@@ -1779,7 +1895,7 @@ const GameRoadmap = ({ user }) => {
                       });
 
                       return (
-                        <div key={t.id} id={`public-item-${t.id}`} className="bg-white rounded-3xl border border-indigo-100 shadow-sm p-4 hover:shadow-md transition-all">
+                        <div key={t.id} id={`public-item-${t.id}`} className="bg-white rounded-3xl border border-indigo-100 shadow-sm p-4 hover:shadow-md transition-all scroll-mt-20">
                           <div className={`flex items-center gap-3 ${isDone ? 'opacity-60' : ''}`}>
                             <div className={`text-[12px] md:text-[14px] font-black font-mono px-2 py-1 rounded-lg text-center ${isDone ? 'bg-slate-100 text-slate-400' : 'bg-indigo-100 text-indigo-600'}`}>
                               {t.time} {t.endTime && <><br/><span className="text-[9px]">{t.endTime}</span></>}
@@ -1879,7 +1995,7 @@ const GameRoadmap = ({ user }) => {
                       });
 
                       return (
-                        <div key={ev.id} id={`public-item-${ev.id}`} className="relative pl-7">
+                        <div key={ev.id} id={`public-item-${ev.id}`} className="relative pl-7 scroll-mt-20">
                           <div className="absolute -left-[11px] top-4 w-5 h-5 bg-pink-400 rounded-full border-[4px] border-white shadow-md flex items-center justify-center"></div>
                           
                           <div className="bg-white border-2 border-pink-100 rounded-3xl p-4 shadow-sm hover:shadow-md transition-shadow hover:-translate-y-0.5">
@@ -1981,6 +2097,7 @@ const GameRoadmap = ({ user }) => {
         input[type="time"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
         input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; opacity: 0.6; transition: opacity 0.2s; }
         input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+        .scroll-mt-20 { scroll-margin-top: 5rem; }
       ` }} />
     </div>
   );
