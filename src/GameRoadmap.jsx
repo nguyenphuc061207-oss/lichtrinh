@@ -38,7 +38,7 @@ const getPri  = (id) => PRIORITIES.find(p => p.id === id) || PRIORITIES[1];
 // ============================================================
 const formatDateToYMD = (dateObj) => {
   const d = new Date(dateObj);
-  if (isNaN(d.getTime())) return new Date().toISOString().split('T')[0]; // Fallback an toàn
+  if (isNaN(d.getTime())) return new Date().toISOString().split('T')[0];
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 const todayYMD = formatDateToYMD(new Date());
@@ -92,14 +92,18 @@ const GameRoadmap = ({ user }) => {
   const [showMobileMap,       setShowMobileMap]       = useState(false);
   const [selectedEventDetail, setSelectedEventDetail] = useState(null);
   const [isDeadlineModalOpen, setIsDeadlineModalOpen] = useState(false);
-  const [isStatsOpen,         setIsStatsOpen]         = useState(false);
+  
+  // 🔥 MODAL LỊCH NGÀY (Bên ngoài)
+  const [isDailyModalOpen,    setIsDailyModalOpen]    = useState(false);
+  const [quickViewDate,       setQuickViewDate]       = useState(todayYMD);
+
   const generateID = () => Math.floor(10000000 + Math.random() * 90000000).toString();
 
   const [profile, setProfile] = useState({
     avatar:      "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200",
     background:  "https://images.unsplash.com/photo-1541562232579-512a21360020?q=80&w=800",
     title:       "TỔNG QUAN LỊCH TRÌNH",
-    subtitle:    "v7.5",
+    subtitle:    "v7.6",
     displayName: "Người dùng mới",
     shortId:     "........",
     bio:         "",
@@ -141,7 +145,6 @@ const GameRoadmap = ({ user }) => {
           })));
         }
         
-        // --- DATA MIGRATION: Chuẩn hoá dữ liệu lịch ngày cũ tránh crash ---
         if (data.dailySchedule) {
           const patchedDaily = data.dailySchedule.map(t => ({
             ...t,
@@ -196,21 +199,7 @@ const GameRoadmap = ({ user }) => {
     } catch (error) { console.error("Lỗi đồng bộ:", error); }
   };
 
-  // ── 3. STATISTICS ──────────────────────────────────────────
-  const stats = useMemo(() => {
-    const total     = events.length;
-    const done      = events.filter(e => e.status === 'done').length;
-    const inProg    = events.filter(e => e.status === 'in-progress').length;
-    const upcoming  = events.filter(e => e.start > now).length;
-    const urgentCount = events.filter(e => {
-      const d = Math.ceil((e.end.getTime() - now.getTime()) / 86400000);
-      return d >= 0 && d <= 3;
-    }).length;
-    const catBreakdown = CATEGORIES.map(c => ({ ...c, count: events.filter(e => e.category === c.id).length }));
-    return { total, done, inProg, upcoming, urgentCount, catBreakdown };
-  }, [events]);
-
-  // ── 4. FILTERED EVENTS ─────────────────────────────────────
+  // ── 3. FILTERED EVENTS ─────────────────────────────────────
   const filteredEvents = useMemo(() => events.filter(ev => {
     const matchCat   = filterCat  === 'all' || ev.category === filterCat;
     const matchStat  = filterStat === 'all' || ev.status   === filterStat;
@@ -218,29 +207,8 @@ const GameRoadmap = ({ user }) => {
     return matchCat && matchStat && matchSearch;
   }), [events, filterCat, filterStat, searchQuery]);
 
-  // ── 5. SETTINGS MODAL STATE ────────────────────────────────
-  const [isSettingsOpen,   setIsSettingsOpen]   = useState(false);
-  const [activeTab,        setActiveTab]        = useState('profile');
-  
-  // 🔥 DÒNG NÀY ĐÃ ĐƯỢC KHÔI PHỤC LẠI ĐỂ FIX LỖI NÚT CÀI ĐẶT
-  const [profileFormData,  setProfileFormData]  = useState(profile); 
-  
-  const [eventFormData,    setEventFormData]    = useState({
-    title: '', startDate: '', endDate: '', rewards: '', notes: '',
-    category: 'study', status: 'todo', priority: 'medium', progress: 0,
-  });
-
-  // ── DAILY SCHEDULE STATE & LOGIC ──
-  const [dailyViewDate, setDailyViewDate] = useState(todayYMD);
-  const [dailyForm, setDailyForm] = useState({ 
-    startDate: todayYMD, 
-    time: '', 
-    task: '',
-    repeat: 'none',
-    customDays: 1,
-    isShared: false 
-  });
-
+  // ── 4. DAILY SCHEDULE LOGIC ────────────────────────────────
+  // Hàm kiểm tra Task có xuất hiện vào ngày targetDateStr không
   const checkTaskOnDate = (task, targetDateStr) => {
     if (!task || !task.startDate) return false; 
     const start = new Date(task.startDate); start.setHours(0,0,0,0);
@@ -262,7 +230,35 @@ const GameRoadmap = ({ user }) => {
     return false;
   };
 
-  const filteredDailySchedule = useMemo(() => {
+  // Trích xuất các ngày "đã đặt lịch" (startDate gốc) để hiển thị trong Select Dropdown
+  const uniqueScheduledDates = useMemo(() => {
+    const dates = new Set(dailySchedule.map(t => t.startDate).filter(d => d));
+    dates.add(todayYMD); // Đảm bảo luôn có hôm nay trong mảng logic
+    return Array.from(dates).sort();
+  }, [dailySchedule]);
+
+  // Dữ liệu hiển thị cho Modal Quick View bên ngoài
+  const quickViewSchedule = useMemo(() => {
+    return dailySchedule
+      .filter(t => checkTaskOnDate(t, quickViewDate))
+      .sort((a, b) => (a.time || "00:00").localeCompare(b.time || "00:00")); 
+  }, [dailySchedule, quickViewDate]);
+
+  // ── 5. SETTINGS MODAL STATE ────────────────────────────────
+  const [isSettingsOpen,   setIsSettingsOpen]   = useState(false);
+  const [activeTab,        setActiveTab]        = useState('profile');
+  const [profileFormData,  setProfileFormData]  = useState(profile); 
+  const [eventFormData,    setEventFormData]    = useState({
+    title: '', startDate: '', endDate: '', rewards: '', notes: '',
+    category: 'study', status: 'todo', priority: 'medium', progress: 0,
+  });
+
+  const [dailyViewDate, setDailyViewDate] = useState(todayYMD); // Dùng cho Tab Lịch Ngày trong Cài Đặt
+  const [dailyForm, setDailyForm] = useState({ 
+    startDate: todayYMD, time: '', task: '', repeat: 'none', customDays: 1, isShared: false 
+  });
+
+  const filteredSettingsDailySchedule = useMemo(() => {
     return dailySchedule
       .filter(t => checkTaskOnDate(t, dailyViewDate))
       .sort((a, b) => (a.time || "00:00").localeCompare(b.time || "00:00")); 
@@ -450,6 +446,15 @@ const GameRoadmap = ({ user }) => {
     saveToCloud(profile, events, friendsList, updated);
   };
 
+  // 🔥 Hàm thay đổi trạng thái Công khai/Riêng tư trực tiếp
+  const handleToggleShareDailyTask = (id) => {
+    const updated = dailySchedule.map(t => 
+      t.id === id ? { ...t, isShared: !t.isShared } : t
+    );
+    setDailySchedule(updated);
+    saveToCloud(profile, events, friendsList, updated);
+  };
+
   const handleAddFriend = async (e) => {
     e.preventDefault();
     if (searchFriendId === profile.shortId) { alert("Bạn không thể tự kết bạn với chính mình!"); return; }
@@ -498,6 +503,16 @@ const GameRoadmap = ({ user }) => {
     if (ev.status === 'todo') return 0;
     return ev.progress || 0;
   };
+
+  // Thống kê dùng cho các thẻ nhỏ ở Sidebar (Vẫn giữ nguyên tính toán)
+  const stats = useMemo(() => {
+    const total     = events.length;
+    const done      = events.filter(e => e.status === 'done').length;
+    const inProg    = events.filter(e => e.status === 'in-progress').length;
+    const upcoming  = events.filter(e => e.start > now).length;
+    const catBreakdown = CATEGORIES.map(c => ({ ...c, count: events.filter(e => e.category === c.id).length }));
+    return { total, done, inProg, upcoming, catBreakdown };
+  }, [events]);
 
   const urgentEvents = events.filter(ev => { const d = getDaysLeft(ev); return d >= 0 && d <= 3; });
 
@@ -552,14 +567,16 @@ const GameRoadmap = ({ user }) => {
 
           {/* RIGHT — Action Buttons */}
           <div className="flex items-center gap-2">
-            <button onClick={() => setIsStatsOpen(true)}
-              className="hidden md:flex items-center gap-1.5 text-[11px] font-black uppercase px-4 py-2 rounded-xl transition-all shadow-sm hover:scale-105 hover:shadow-md"
+            
+            {/* 🔥 NÚT LỊCH NGÀY MỚI (Thay cho Bảng Thống Kê) */}
+            <button onClick={() => setIsDailyModalOpen(true)}
+              className="hidden md:flex items-center gap-1.5 text-[11px] font-black uppercase px-4 py-2 rounded-xl transition-all shadow-sm hover:scale-105 hover:shadow-md cursor-pointer"
               style={{ background: '#e0e7ff', color: '#4f46e5', border: '1px solid #c7d2fe' }}>
-              📊 Thống kê
+              ⏰ Lịch Ngày
             </button>
 
             <button onClick={() => setIsDeadlineModalOpen(true)}
-              className="relative flex items-center gap-1.5 text-[11px] font-black uppercase px-4 py-2 rounded-xl transition-all shadow-sm hover:scale-105 hover:shadow-md"
+              className="relative flex items-center gap-1.5 text-[11px] font-black uppercase px-4 py-2 rounded-xl transition-all shadow-sm hover:scale-105 hover:shadow-md cursor-pointer"
               style={{ background: urgentEvents.length > 0 ? '#fee2e2' : '#fef3c7', color: urgentEvents.length > 0 ? '#dc2626' : '#d97706', border: `1px solid ${urgentEvents.length > 0 ? '#fecaca' : '#fde68a'}` }}>
               ⏰ Deadline
               {urgentEvents.length > 0 && (
@@ -576,7 +593,7 @@ const GameRoadmap = ({ user }) => {
             </button>
 
             <button onClick={handleLogout}
-              className="flex items-center justify-center w-8 h-8 rounded-xl transition-all shadow-sm hover:scale-105"
+              className="flex items-center justify-center w-8 h-8 rounded-xl transition-all shadow-sm hover:scale-105 cursor-pointer"
               style={{ background: '#fee2e2', color: '#ef4444', border: '1px solid #fecaca' }}>
               ⏏
             </button>
@@ -600,7 +617,7 @@ const GameRoadmap = ({ user }) => {
               </div>
               <div className="md:hidden absolute inset-0 flex items-center justify-center bg-white/40 backdrop-blur-sm">
                 <button onClick={() => setShowMobileMap(true)}
-                  className="bg-pink-500 text-white font-black px-6 py-3 rounded-full text-sm shadow-[0_4px_15px_rgba(236,72,153,0.4)] border-2 border-white hover:scale-105 transition-transform">
+                  className="bg-pink-500 text-white font-black px-6 py-3 rounded-full text-sm shadow-[0_4px_15px_rgba(236,72,153,0.4)] border-2 border-white hover:scale-105 transition-transform cursor-pointer">
                   XEM LỊCH TRÌNH 
                 </button>
               </div>
@@ -673,7 +690,7 @@ const GameRoadmap = ({ user }) => {
             <div className="shrink-0 px-4 py-3 flex flex-wrap items-center gap-3 bg-white border-b border-slate-100 z-10">
 
               <button onClick={() => setShowMobileMap(false)}
-                className="md:hidden text-[10px] font-black px-3 py-1.5 rounded-lg bg-pink-100 text-pink-600 border border-pink-200 shadow-sm">
+                className="md:hidden text-[10px] font-black px-3 py-1.5 rounded-lg bg-pink-100 text-pink-600 border border-pink-200 shadow-sm cursor-pointer">
                 ← Quay lại
               </button>
 
@@ -687,13 +704,13 @@ const GameRoadmap = ({ user }) => {
               {/* Category Filter */}
               <div className="flex gap-1.5 overflow-x-auto custom-scrollbar pb-1 md:pb-0">
                 <button onClick={() => setFilterCat('all')}
-                  className={`shrink-0 text-[11px] font-black px-3 py-1.5 rounded-xl transition-all shadow-sm ${filterCat === 'all' ? 'bg-pink-100 text-pink-600 border-pink-300' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                  className={`shrink-0 text-[11px] font-black px-3 py-1.5 rounded-xl transition-all shadow-sm cursor-pointer ${filterCat === 'all' ? 'bg-pink-100 text-pink-600 border-pink-300' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
                   style={{ border: `1px solid ${filterCat === 'all' ? '#f9a8d4' : '#e2e8f0'}` }}>
                   Tất cả
                 </button>
                 {CATEGORIES.map(cat => (
                   <button key={cat.id} onClick={() => setFilterCat(cat.id === filterCat ? 'all' : cat.id)}
-                    className="shrink-0 text-[11px] font-black px-3 py-1.5 rounded-xl transition-all shadow-sm"
+                    className="shrink-0 text-[11px] font-black px-3 py-1.5 rounded-xl transition-all shadow-sm cursor-pointer"
                     style={{ background: filterCat === cat.id ? cat.bg : '#ffffff', color: filterCat === cat.id ? cat.text : '#64748b', border: `1px solid ${filterCat === cat.id ? cat.border : '#e2e8f0'}` }}>
                     {cat.icon} {cat.label}
                   </button>
@@ -704,7 +721,7 @@ const GameRoadmap = ({ user }) => {
               <div className="flex gap-1.5">
                 {[{ id: 'all', label: '⭐ Tất cả' }, ...STATUSES.map(s => ({ id: s.id, label: s.icon + ' ' + s.label }))].map(s => (
                   <button key={s.id} onClick={() => setFilterStat(s.id === filterStat ? 'all' : s.id)}
-                    className="shrink-0 text-[11px] font-black px-3 py-1.5 rounded-xl transition-all shadow-sm"
+                    className="shrink-0 text-[11px] font-black px-3 py-1.5 rounded-xl transition-all shadow-sm cursor-pointer"
                     style={{ background: filterStat === s.id ? '#e0e7ff' : '#ffffff', color: filterStat === s.id ? '#4f46e5' : '#64748b', border: `1px solid ${filterStat === s.id ? '#c7d2fe' : '#e2e8f0'}` }}>
                     {s.label}
                   </button>
@@ -714,12 +731,12 @@ const GameRoadmap = ({ user }) => {
               {/* Zoom */}
               <div className="flex items-center gap-1.5 ml-auto bg-slate-50 p-1 rounded-xl border border-slate-200 shadow-inner">
                 <button onClick={() => setZoomLevel(z => Math.max(0.4, +(z - 0.3).toFixed(1)))}
-                  className="w-7 h-7 bg-white rounded-lg flex items-center justify-center text-sm font-black text-slate-500 hover:text-pink-500 shadow-sm border border-slate-200">−</button>
+                  className="w-7 h-7 bg-white rounded-lg flex items-center justify-center text-sm font-black text-slate-500 hover:text-pink-500 shadow-sm border border-slate-200 cursor-pointer">−</button>
                 <span className="text-[11px] font-black w-12 text-center text-indigo-600">{Math.round(zoomLevel * 100)}%</span>
                 <button onClick={() => setZoomLevel(z => Math.min(3, +(z + 0.3).toFixed(1)))}
-                  className="w-7 h-7 bg-white rounded-lg flex items-center justify-center text-sm font-black text-slate-500 hover:text-pink-500 shadow-sm border border-slate-200">+</button>
+                  className="w-7 h-7 bg-white rounded-lg flex items-center justify-center text-sm font-black text-slate-500 hover:text-pink-500 shadow-sm border border-slate-200 cursor-pointer">+</button>
                 <button onClick={() => setZoomLevel(1)}
-                  className="text-[10px] px-3 h-7 rounded-lg font-black bg-pink-100 text-pink-600 shadow-sm border border-pink-200 ml-1">Reset</button>
+                  className="text-[10px] px-3 h-7 rounded-lg font-black bg-pink-100 text-pink-600 shadow-sm border border-pink-200 ml-1 cursor-pointer">Reset</button>
               </div>
             </div>
 
@@ -1071,10 +1088,9 @@ const GameRoadmap = ({ user }) => {
                 </div>
               )}
 
-              {/* ── TAB: LỊCH TRÌNH TRONG NGÀY ── */}
+              {/* ── TAB: LỊCH TRÌNH TRONG NGÀY (CÀI ĐẶT) ── */}
               {activeTab === 'daily' && (
                 <div className="space-y-6">
-                  
                   {/* Controls cho View Date */}
                   <div className="flex flex-col sm:flex-row items-center justify-between bg-indigo-50 p-4 rounded-3xl border-2 border-indigo-100 shadow-sm gap-3">
                     <div className="text-[12px] font-black uppercase text-indigo-600">Đang xem lịch ngày:</div>
@@ -1099,7 +1115,6 @@ const GameRoadmap = ({ user }) => {
                   {/* Add Task Form */}
                   <form onSubmit={handleAddDailyTask} className="bg-white p-5 rounded-3xl border-2 border-slate-100 shadow-sm flex flex-col gap-4">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      {/* Ngày bắt đầu */}
                       <div className="col-span-2 md:col-span-1">
                         <label className="text-[10px] font-black uppercase mb-1.5 block text-indigo-500">Từ ngày</label>
                         <input required type="date"
@@ -1107,7 +1122,6 @@ const GameRoadmap = ({ user }) => {
                           value={dailyForm.startDate} onChange={e => setDailyForm(p => ({ ...p, startDate: e.target.value }))} />
                       </div>
                       
-                      {/* Giờ */}
                       <div className="col-span-2 md:col-span-1">
                         <label className="text-[10px] font-black uppercase mb-1.5 block text-indigo-500">Giờ (00-23)</label>
                         <input required type="time"
@@ -1115,7 +1129,6 @@ const GameRoadmap = ({ user }) => {
                           value={dailyForm.time} onChange={e => setDailyForm(p => ({ ...p, time: e.target.value }))} />
                       </div>
                       
-                      {/* Lặp lại */}
                       <div className="col-span-2">
                         <label className="text-[10px] font-black uppercase mb-1.5 block text-indigo-500">Chu kỳ lặp</label>
                         <select
@@ -1160,19 +1173,19 @@ const GameRoadmap = ({ user }) => {
                     </div>
                   </form>
 
-                  {/* Task List */}
+                  {/* Task List (Cài đặt) */}
                   <div className="rounded-3xl p-5 bg-white border-2 border-slate-100 shadow-sm">
                     <div className="text-[13px] font-black uppercase text-indigo-500 mb-4 flex items-center gap-2">
-                      <span className="text-xl">⏰</span> Lịch trình ngày {dailyViewDate} ({filteredDailySchedule.length})
+                      <span className="text-xl">⏰</span> Lịch trình ngày {dailyViewDate} ({filteredSettingsDailySchedule.length})
                     </div>
                     
-                    {filteredDailySchedule.length === 0 ? (
+                    {filteredSettingsDailySchedule.length === 0 ? (
                       <div className="text-[13px] italic text-slate-400 py-6 text-center border-2 border-dashed border-slate-100 rounded-2xl">
                         Trống trơn! Hãy dành thời gian nghỉ ngơi hoặc lên kế hoạch mới nhé.
                       </div>
                     ) : (
                       <div className="space-y-3">
-                        {filteredDailySchedule.map(item => {
+                        {filteredSettingsDailySchedule.map(item => {
                           const isDoneOnThisDate = item.completedDates?.includes(dailyViewDate);
                           return (
                             <div key={item.id} className={`flex items-center gap-3 md:gap-4 p-3.5 rounded-2xl border-2 transition-all ${isDoneOnThisDate ? 'bg-slate-50 border-slate-100 opacity-60' : 'bg-white border-indigo-100 hover:border-indigo-300 shadow-sm hover:-translate-y-0.5'}`}>
@@ -1260,65 +1273,121 @@ const GameRoadmap = ({ user }) => {
       )}
 
       {/* ════════════════════════════════════════════════════════
-          STATISTICS & MODALS
+          MODAL XEM LỊCH NGÀY NHANH (Thay cho Thống Kê)
       ════════════════════════════════════════════════════════ */}
-      {isStatsOpen && (
-        <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(10px)' }} onClick={() => setIsStatsOpen(false)}>
-          <div className="w-full max-w-[520px] rounded-[2rem] overflow-hidden bg-white border-[3px] border-indigo-100 shadow-[0_20px_50px_rgba(79,70,229,0.15)] relative" onClick={e => e.stopPropagation()}>
-            <div className="px-6 py-5 flex items-center justify-between bg-indigo-50 border-b border-indigo-100">
-              <h2 className="font-black text-xl text-indigo-900 flex items-center gap-2"><span>📊</span> Bảng Thống Kê</h2>
-              <button onClick={() => setIsStatsOpen(false)} className="text-slate-400 hover:text-indigo-600 hover:bg-white w-8 h-8 rounded-full flex items-center justify-center font-black transition-all shadow-sm border border-transparent hover:border-indigo-200 cursor-pointer">✕</button>
+      {isDailyModalOpen && (
+        <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(10px)' }} onClick={() => setIsDailyModalOpen(false)}>
+          <div className="w-full max-w-[600px] max-h-[85vh] rounded-[2rem] overflow-hidden bg-white border-[3px] border-indigo-100 shadow-[0_20px_50px_rgba(79,70,229,0.15)] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="px-6 py-5 flex items-center justify-between bg-indigo-50 border-b border-indigo-100 shrink-0">
+              <h2 className="font-black text-xl text-indigo-900 flex items-center gap-2"><span>⏰</span> Lịch Trình Trong Ngày</h2>
+              <button onClick={() => setIsDailyModalOpen(false)} className="text-slate-400 hover:text-indigo-600 hover:bg-white w-8 h-8 rounded-full flex items-center justify-center font-black transition-all shadow-sm border border-transparent hover:border-indigo-200 cursor-pointer">✕</button>
             </div>
-            <div className="p-6 space-y-5 bg-slate-50/50">
-              {/* Overall */}
-              <div className="grid grid-cols-4 gap-3">
-                {[
-                  { val: stats.total,    label: 'Tổng số',    color: '#6366f1', bg: '#e0e7ff', border: '#c7d2fe', icon: '📋' },
-                  { val: stats.done,     label: 'Hoàn thành', color: '#10b981', bg: '#d1fae5', border: '#a7f3d0', icon: '✅' },
-                  { val: stats.inProg,   label: 'Đang làm',   color: '#3b82f6', bg: '#dbeafe', border: '#bfdbfe', icon: '⏳' },
-                  { val: stats.urgentCount, label: 'Khẩn cấp', color: '#f43f5e', bg: '#ffe4e6', border: '#fecdd3', icon: '🔥' },
-                ].map(s => (
-                  <div key={s.label} className="rounded-2xl p-3 text-center shadow-sm" style={{ background: s.bg, border: `1px solid ${s.border}` }}>
-                    <div className="text-2xl mb-1">{s.icon}</div>
-                    <div className="font-black text-2xl" style={{ color: s.color }}>{s.val}</div>
-                    <div className="text-[10px] font-black mt-1 uppercase" style={{ color: s.color }}>{s.label}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Progress bar total */}
-              {stats.total > 0 && (
-                <div className="rounded-2xl p-5 bg-white border border-slate-100 shadow-sm">
-                  <div className="flex justify-between text-[12px] font-black mb-3">
-                    <span className="text-slate-500 uppercase">Tiến độ tổng thể</span>
-                    <span className="text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-lg">{Math.round((stats.done / stats.total) * 100)}%</span>
-                  </div>
-                  <div className="h-3 rounded-full bg-slate-100 overflow-hidden border border-slate-200 shadow-inner">
-                    <div className="h-full rounded-full transition-all" style={{ width: `${(stats.done / stats.total) * 100}%`, background: 'linear-gradient(90deg, #34d399, #10b981)' }}></div>
-                  </div>
-                </div>
-              )}
-
-              {/* Category breakdown */}
-              <div className="rounded-2xl p-5 bg-white border border-slate-100 shadow-sm">
-                <div className="text-[11px] font-black uppercase mb-4 text-indigo-400">Phân loại sự kiện chi tiết</div>
-                <div className="space-y-3">
-                  {stats.catBreakdown.map(cat => (
-                    <div key={cat.id} className="flex items-center gap-3">
-                      <div className="text-[12px] w-28 truncate font-black text-slate-600">{cat.icon} {cat.label}</div>
-                      <div className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden border border-slate-200">
-                        <div className="h-full rounded-full" style={{ width: stats.total > 0 ? `${(cat.count / stats.total) * 100}%` : '0%', background: cat.color }}></div>
-                      </div>
-                      <div className="text-[12px] font-black w-6 text-right" style={{ color: cat.color }}>{cat.count}</div>
-                    </div>
+            
+            <div className="flex-1 overflow-y-auto p-5 md:p-6 bg-slate-50/50 custom-scrollbar flex flex-col gap-5">
+              
+              {/* Toolbar điều hướng ngày */}
+              <div className="flex flex-col sm:flex-row items-center gap-3 bg-white p-3 rounded-2xl border-2 border-indigo-50 shadow-sm">
+                
+                {/* Chọn ngày từ Dropdown (Các ngày đã đặt lịch) */}
+                <select 
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl border-2 border-indigo-100 outline-none font-black text-indigo-700 bg-indigo-50/50 cursor-pointer text-sm"
+                  value={quickViewDate}
+                  onChange={e => setQuickViewDate(e.target.value)}
+                >
+                  <option value={todayYMD} disabled className="italic">-- Ngày đã đặt lịch --</option>
+                  {uniqueScheduledDates.map(dateStr => (
+                    <option key={dateStr} value={dateStr}>
+                      {dateStr === todayYMD ? '🔥 Hôm nay' : `📅 ${dateStr}`}
+                    </option>
                   ))}
+                </select>
+
+                <div className="hidden sm:block w-px h-8 bg-slate-200 mx-1"></div>
+
+                {/* Chọn ngày tuỳ ý & Điều hướng nhanh */}
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <button onClick={() => {
+                    const d = new Date(quickViewDate); d.setDate(d.getDate() - 1);
+                    setQuickViewDate(formatDateToYMD(d));
+                  }} className="w-10 h-10 rounded-xl bg-white border border-slate-200 text-slate-500 font-black shadow-sm hover:bg-indigo-50 hover:text-indigo-600 transition-colors cursor-pointer shrink-0">←</button>
+                  
+                  <input type="date" value={quickViewDate} onChange={e => setQuickViewDate(e.target.value)}
+                    className="flex-1 px-2 md:px-4 py-2.5 rounded-xl border-2 border-slate-200 outline-none font-bold text-slate-700 bg-white text-sm" />
+                  
+                  <button onClick={() => {
+                    const d = new Date(quickViewDate); d.setDate(d.getDate() + 1);
+                    setQuickViewDate(formatDateToYMD(d));
+                  }} className="w-10 h-10 rounded-xl bg-white border border-slate-200 text-slate-500 font-black shadow-sm hover:bg-indigo-50 hover:text-indigo-600 transition-colors cursor-pointer shrink-0">→</button>
                 </div>
+
+                <button onClick={() => setQuickViewDate(todayYMD)} 
+                  className={`w-full sm:w-auto text-[11px] font-black px-4 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer ${quickViewDate === todayYMD ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'}`}>
+                  HÔM NAY
+                </button>
               </div>
+
+              {/* Danh sách Task */}
+              <div className="bg-white rounded-3xl border-2 border-slate-100 shadow-sm p-4 min-h-[250px]">
+                <div className="text-[13px] font-black uppercase text-indigo-500 mb-4 flex items-center justify-between">
+                  <span>Danh sách công việc ({quickViewSchedule.length})</span>
+                  <span className="text-[10px] text-slate-400 font-bold bg-slate-50 px-2 py-1 rounded-lg border border-slate-200">
+                    {quickViewDate === todayYMD ? 'Hôm nay' : quickViewDate}
+                  </span>
+                </div>
+
+                {quickViewSchedule.length === 0 ? (
+                  <div className="text-[13px] italic text-slate-400 py-10 text-center border-2 border-dashed border-slate-100 rounded-2xl">
+                    Chưa có lịch trình nào cho ngày này.<br/>
+                    <span className="text-[11px] text-indigo-400">Bạn có thể tạo mới trong mục Cài đặt ⚙️</span>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {quickViewSchedule.map(item => {
+                      const isDone = item.completedDates?.includes(quickViewDate);
+                      return (
+                        <div key={item.id} className={`flex items-center gap-3 p-3.5 rounded-2xl border-2 transition-all ${isDone ? 'bg-slate-50 border-slate-100 opacity-70' : 'bg-white border-indigo-50 shadow-sm hover:border-indigo-200'}`}>
+                          
+                          <button onClick={() => handleToggleDailyTask(item.id, quickViewDate)}
+                            className={`w-7 h-7 rounded-full flex items-center justify-center text-sm shrink-0 transition-colors shadow-inner cursor-pointer ${isDone ? 'bg-emerald-500 text-white border border-emerald-600' : 'bg-slate-50 border-2 border-slate-300 text-transparent hover:border-emerald-400'}`}>
+                            ✔
+                          </button>
+                          
+                          <div className={`text-[14px] font-black font-mono px-2.5 py-1 rounded-xl border shrink-0 ${isDone ? 'bg-slate-100 text-slate-400 border-slate-200' : 'bg-indigo-50 text-indigo-600 border-indigo-200'}`}>
+                            {item.time}
+                          </div>
+                          
+                          <div className="flex-1 min-w-0 flex flex-col md:flex-row md:items-center justify-between gap-2">
+                            <div className={`text-[14px] font-bold truncate ${isDone ? 'line-through text-slate-400' : 'text-slate-700'}`}>
+                              {item.task}
+                              {item.repeat !== 'none' && (
+                                <span className="inline-block ml-2 text-[9px] font-black px-1.5 py-0.5 rounded border border-slate-200 text-slate-400 bg-slate-50 align-middle">
+                                  🔄
+                                </span>
+                              )}
+                            </div>
+                            
+                            {/* 🔥 Nút điều chỉnh Công khai trực tiếp ở ngoài */}
+                            <button onClick={() => handleToggleShareDailyTask(item.id)}
+                              className={`shrink-0 text-[10px] font-black px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${item.isShared ? 'bg-pink-100 text-pink-600 border-pink-200 hover:bg-pink-200' : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'}`}>
+                              {item.isShared ? '📢 Công khai' : '🔒 Riêng tư'}
+                            </button>
+                          </div>
+
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
             </div>
           </div>
         </div>
       )}
 
+      {/* ════════════════════════════════════════════════════════
+          EVENT DETAIL MODAL
+      ════════════════════════════════════════════════════════ */}
       {selectedEventDetail && (
         <div className="fixed inset-0 flex items-center justify-center z-[120] p-4" style={{ background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)' }} onClick={() => setSelectedEventDetail(null)}>
           <div className="w-full max-w-[420px] rounded-[2rem] overflow-hidden shadow-[0_20px_60px_rgba(0,0,0,0.1)] bg-white relative flex flex-col" onClick={e => e.stopPropagation()}
