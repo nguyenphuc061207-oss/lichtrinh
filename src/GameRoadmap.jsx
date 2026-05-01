@@ -29,6 +29,8 @@ const PRIORITIES = [
   { id: 'high',   label: 'Cao',    icon: '🔴' },
 ];
 
+const REACTIONS = ['👍', '❤️', '😂', '🔥', '👏'];
+
 const getCat  = (id) => CATEGORIES.find(c => c.id === id) || CATEGORIES[5];
 const getStat = (id) => STATUSES.find(s => s.id === id)   || STATUSES[0];
 const getPri  = (id) => PRIORITIES.find(p => p.id === id) || PRIORITIES[1];
@@ -93,7 +95,6 @@ const GameRoadmap = ({ user }) => {
   const [selectedEventDetail, setSelectedEventDetail] = useState(null);
   const [isDeadlineModalOpen, setIsDeadlineModalOpen] = useState(false);
   
-  // 🔥 MODAL LỊCH NGÀY (Bên ngoài)
   const [isDailyModalOpen,    setIsDailyModalOpen]    = useState(false);
   const [quickViewDate,       setQuickViewDate]       = useState(todayYMD);
 
@@ -103,7 +104,7 @@ const GameRoadmap = ({ user }) => {
     avatar:      "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200",
     background:  "https://images.unsplash.com/photo-1541562232579-512a21360020?q=80&w=800",
     title:       "TỔNG QUAN LỊCH TRÌNH",
-    subtitle:    "v7.6",
+    subtitle:    "v8.0",
     displayName: "Người dùng mới",
     shortId:     "........",
     bio:         "",
@@ -113,8 +114,12 @@ const GameRoadmap = ({ user }) => {
   const [dailySchedule, setDailySchedule] = useState([]);
   const [friendsList,   setFriendsList]   = useState([]);
   const [friendsData,   setFriendsData]   = useState([]);
+  const [notifications, setNotifications] = useState([]);
+  const [isNotifOpen,   setIsNotifOpen]   = useState(false);
+
   const [searchFriendId,    setSearchFriendId]    = useState('');
   const [viewingFriendFeed, setViewingFriendFeed] = useState(null);
+  const [commentInputs,     setCommentInputs]     = useState({}); // State lưu text comment
   const [isLoading,         setIsLoading]         = useState(true);
 
   useEffect(() => {
@@ -142,6 +147,8 @@ const GameRoadmap = ({ user }) => {
             priority: ev.priority || 'medium',
             progress: ev.progress ?? 0,
             notes:    ev.notes    || '',
+            reactions: ev.reactions || {},
+            comments: ev.comments || []
           })));
         }
         
@@ -150,19 +157,24 @@ const GameRoadmap = ({ user }) => {
             ...t,
             startDate: t.startDate || todayYMD,
             time: t.time || "00:00",
+            endTime: t.endTime || "",
             repeat: t.repeat || 'none',
             customDays: t.customDays || 1,
             completedDates: t.completedDates || (t.isDone ? [todayYMD] : []),
-            isShared: t.isShared || false
+            isShared: t.isShared || false,
+            reactions: t.reactions || {},
+            comments: t.comments || []
           }));
           setDailySchedule(patchedDaily);
         }
         
         if (data.friends) setFriendsList(data.friends);
+        if (data.notifications) setNotifications(data.notifications.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)));
+
       } else {
         const newProfile = { ...profile, shortId: generateID() };
         setProfile(newProfile);
-        saveToCloud(newProfile, events, [], []);
+        saveToCloud(newProfile, events, [], [], []);
       }
       setIsLoading(false);
     });
@@ -187,14 +199,15 @@ const GameRoadmap = ({ user }) => {
     fetchFriendsData();
   }, [friendsList]);
 
-  const saveToCloud = async (newProfile, newEvents, newFriends = friendsList, newDaily = dailySchedule) => {
+  const saveToCloud = async (newProfile, newEvents, newFriends = friendsList, newDaily = dailySchedule, newNotifs = notifications) => {
     if (!user) return;
     try {
       await setDoc(doc(db, "users", user.uid), { 
         profile: newProfile, 
         events: newEvents, 
         friends: newFriends,
-        dailySchedule: newDaily 
+        dailySchedule: newDaily,
+        notifications: newNotifs
       }, { merge: true });
     } catch (error) { console.error("Lỗi đồng bộ:", error); }
   };
@@ -208,7 +221,6 @@ const GameRoadmap = ({ user }) => {
   }), [events, filterCat, filterStat, searchQuery]);
 
   // ── 4. DAILY SCHEDULE LOGIC ────────────────────────────────
-  // Hàm kiểm tra Task có xuất hiện vào ngày targetDateStr không
   const checkTaskOnDate = (task, targetDateStr) => {
     if (!task || !task.startDate) return false; 
     const start = new Date(task.startDate); start.setHours(0,0,0,0);
@@ -230,14 +242,12 @@ const GameRoadmap = ({ user }) => {
     return false;
   };
 
-  // Trích xuất các ngày "đã đặt lịch" (startDate gốc) để hiển thị trong Select Dropdown
   const uniqueScheduledDates = useMemo(() => {
     const dates = new Set(dailySchedule.map(t => t.startDate).filter(d => d));
-    dates.add(todayYMD); // Đảm bảo luôn có hôm nay trong mảng logic
+    dates.add(todayYMD);
     return Array.from(dates).sort();
   }, [dailySchedule]);
 
-  // Dữ liệu hiển thị cho Modal Quick View bên ngoài
   const quickViewSchedule = useMemo(() => {
     return dailySchedule
       .filter(t => checkTaskOnDate(t, quickViewDate))
@@ -253,9 +263,9 @@ const GameRoadmap = ({ user }) => {
     category: 'study', status: 'todo', priority: 'medium', progress: 0,
   });
 
-  const [dailyViewDate, setDailyViewDate] = useState(todayYMD); // Dùng cho Tab Lịch Ngày trong Cài Đặt
+  const [dailyViewDate, setDailyViewDate] = useState(todayYMD);
   const [dailyForm, setDailyForm] = useState({ 
-    startDate: todayYMD, time: '', task: '', repeat: 'none', customDays: 1, isShared: false 
+    startDate: todayYMD, time: '', endTime: '', task: '', repeat: 'none', customDays: 1, isShared: false 
   });
 
   const filteredSettingsDailySchedule = useMemo(() => {
@@ -278,9 +288,10 @@ const GameRoadmap = ({ user }) => {
     reader.addEventListener('load', () => setUpImg(reader.result));
     reader.readAsDataURL(blob);
     setCropTarget(target);
-    if      (target === 'avatar')     { setCropAspectRatio(1/1);   setCrop({ unit: '%', width: 50, aspect: 1/1 }); }
-    else if (target === 'background') { setCropAspectRatio(9/16);  setCrop({ unit: '%', width: 50, aspect: 9/16 }); }
-    else                              { setCropAspectRatio(21/9);  setCrop({ unit: '%', width: 80, aspect: 21/9 }); }
+    if      (target === 'avatar')     { setCropAspectRatio(1/1);     setCrop({ unit: '%', width: 50, aspect: 1/1 }); }
+    // Update aspect ratio cho background là tự do để cắt rõ hơn
+    else if (target === 'background') { setCropAspectRatio(undefined); setCrop({ unit: '%', width: 80, height: 80 }); }
+    else                              { setCropAspectRatio(21/9);    setCrop({ unit: '%', width: 80, aspect: 21/9 }); }
     setIsCropModalOpen(true);
   };
 
@@ -379,6 +390,8 @@ const GameRoadmap = ({ user }) => {
       status:   eventFormData.status,
       priority: eventFormData.priority,
       progress: Number(eventFormData.progress),
+      reactions: {},
+      comments: []
     };
 
     const updated = [...events, newEvent];
@@ -412,17 +425,20 @@ const GameRoadmap = ({ user }) => {
       id: "dl_" + Date.now(),
       startDate: dailyForm.startDate,
       time: dailyForm.time,
+      endTime: dailyForm.endTime,
       task: dailyForm.task,
       repeat: dailyForm.repeat,
       customDays: Number(dailyForm.customDays) || 1,
       isShared: dailyForm.isShared,
-      completedDates: []
+      completedDates: [],
+      reactions: {},
+      comments: []
     };
     
     const updated = [...dailySchedule, newTask];
     setDailySchedule(updated);
     saveToCloud(profile, events, friendsList, updated);
-    setDailyForm(p => ({ ...p, time: '', task: '' }));
+    setDailyForm(p => ({ ...p, time: '', endTime: '', task: '' }));
   };
 
   const handleToggleDailyTask = (id, targetDateStr) => {
@@ -446,7 +462,6 @@ const GameRoadmap = ({ user }) => {
     saveToCloud(profile, events, friendsList, updated);
   };
 
-  // 🔥 Hàm thay đổi trạng thái Công khai/Riêng tư trực tiếp
   const handleToggleShareDailyTask = (id) => {
     const updated = dailySchedule.map(t => 
       t.id === id ? { ...t, isShared: !t.isShared } : t
@@ -468,6 +483,77 @@ const GameRoadmap = ({ user }) => {
     alert("✅ Kết bạn thành công!");
   };
 
+  // TƯƠNG TÁC: Xử lý Bình Luận & Cảm Xúc
+  const handleInteract = async (targetUid, itemId, itemType, actionType, payload) => {
+    if(!user) return;
+    try {
+      const docRef = doc(db, "users", targetUid);
+      const docSnap = await getDoc(docRef);
+      if (!docSnap.exists()) return;
+      const d = docSnap.data();
+      
+      const targetList = itemType === 'event' ? (d.events || []) : (d.dailySchedule || []);
+      const itemIndex = targetList.findIndex(x => x.id === itemId);
+      if (itemIndex === -1) return;
+
+      const item = targetList[itemIndex];
+      let notifs = d.notifications || [];
+      let notifMsg = "";
+
+      if (actionType === 'reaction') {
+        if (!item.reactions) item.reactions = {};
+        if (item.reactions[user.uid] === payload) {
+          delete item.reactions[user.uid];
+        } else {
+          item.reactions[user.uid] = payload;
+          notifMsg = `đã thả ${payload} vào lịch trình của bạn.`;
+        }
+      } else if (actionType === 'comment') {
+        if (!item.comments) item.comments = [];
+        item.comments.push({
+          id: Date.now().toString(),
+          uid: user.uid,
+          displayName: profile.displayName,
+          avatar: profile.avatar,
+          text: payload,
+          createdAt: new Date().toISOString()
+        });
+        notifMsg = `đã bình luận: "${payload}"`;
+        setCommentInputs(p => ({ ...p, [itemId]: '' })); // Clear input
+      }
+
+      if (targetUid !== user.uid && notifMsg) {
+        notifs.push({
+          id: Date.now().toString(),
+          fromUid: user.uid,
+          fromName: profile.displayName,
+          fromAvatar: profile.avatar,
+          text: notifMsg,
+          read: false,
+          createdAt: new Date().toISOString()
+        });
+      }
+
+      await setDoc(docRef, { 
+        [itemType === 'event' ? 'events' : 'dailySchedule']: targetList,
+        notifications: notifs
+      }, { merge: true });
+
+      // Update local view live
+      if (viewingFriendFeed && viewingFriendFeed.uid === targetUid) {
+        setViewingFriendFeed(prev => {
+          const newFeed = {...prev};
+          if(itemType === 'event'){
+            newFeed.events = targetList.filter(ev => ev.isShared).map(ev => ({ ...ev, start: new Date(ev.start), end: new Date(ev.end) })).sort((a,b) => a.start - b.start);
+          } else {
+            newFeed.daily = targetList.filter(t => t.isShared && checkTaskOnDate(t, prev.viewDate)).sort((a,b) => (a.time||"").localeCompare(b.time||""));
+          }
+          return newFeed;
+        });
+      }
+    } catch (e) { console.error("Lỗi tương tác:", e); }
+  };
+
   const handleViewFriendFeed = async (friendUid) => {
     const fDoc = await getDoc(doc(db, "users", friendUid));
     if (!fDoc.exists()) return;
@@ -480,18 +566,27 @@ const GameRoadmap = ({ user }) => {
       end:   ev.end.toDate   ? ev.end.toDate()   : new Date(ev.end),
     })).sort((a, b) => a.start - b.start);
 
-    // Lọc task công khai của bạn bè theo đúng ngày hôm nay
     const sharedDaily = (fData.dailySchedule || [])
       .filter(t => t.isShared && checkTaskOnDate(t, todayYMD))
       .sort((a, b) => (a.time || "00:00").localeCompare(b.time || "00:00"));
 
     setViewingFriendFeed({
+      uid: friendUid,
       profile: fProfile,
       events: sharedEvents,
       daily: sharedDaily,
       viewDate: todayYMD
     });
     setIsSettingsOpen(false);
+  };
+
+  const markNotifsRead = async () => {
+    setIsNotifOpen(!isNotifOpen);
+    if (!isNotifOpen && notifications.some(n => !n.read)) {
+      const updated = notifications.map(n => ({...n, read: true}));
+      setNotifications(updated);
+      await setDoc(doc(db, "users", user.uid), { notifications: updated }, { merge: true });
+    }
   };
 
   const handleLogout = () => signOut(auth).catch(console.error);
@@ -504,7 +599,6 @@ const GameRoadmap = ({ user }) => {
     return ev.progress || 0;
   };
 
-  // Thống kê dùng cho các thẻ nhỏ ở Sidebar (Vẫn giữ nguyên tính toán)
   const stats = useMemo(() => {
     const total     = events.length;
     const done      = events.filter(e => e.status === 'done').length;
@@ -515,6 +609,7 @@ const GameRoadmap = ({ user }) => {
   }, [events]);
 
   const urgentEvents = events.filter(ev => { const d = getDaysLeft(ev); return d >= 0 && d <= 3; });
+  const unreadNotifs = notifications.filter(n => !n.read).length;
 
   // ── 9. RENDER ──────────────────────────────────────────────
   if (isLoading) return (
@@ -549,32 +644,19 @@ const GameRoadmap = ({ user }) => {
               <div className="text-indigo-900 font-black text-[14px] leading-tight drop-shadow-sm">{profile.displayName}</div>
               <div className="text-[10px] font-bold mt-0.5 px-1.5 py-0.5 rounded-full inline-block" style={{ color: '#be185d', background: 'rgba(236, 72, 153, 0.15)' }}>ID: {profile.shortId}</div>
             </div>
-            <div className="hidden md:flex items-center gap-1.5 ml-4">
-              <div className="h-6 w-px bg-pink-200"></div>
-              <div className="flex gap-2 text-[11px] font-bold ml-2">
-                <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-700 shadow-sm border border-emerald-200">
-                  ✅ {stats.done} Xong
-                </span>
-                <span className="px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 shadow-sm border border-blue-200">
-                  ⏳ {stats.inProg} Đang làm
-                </span>
-                <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 shadow-sm border border-slate-200">
-                  📅 {stats.upcoming} Sắp tới
-                </span>
-              </div>
-            </div>
           </div>
 
           {/* RIGHT — Action Buttons */}
           <div className="flex items-center gap-2">
             
-            {/* 🔥 NÚT LỊCH NGÀY MỚI (Thay cho Bảng Thống Kê) */}
+            {/* NÚT LỊCH NGÀY */}
             <button onClick={() => setIsDailyModalOpen(true)}
               className="hidden md:flex items-center gap-1.5 text-[11px] font-black uppercase px-4 py-2 rounded-xl transition-all shadow-sm hover:scale-105 hover:shadow-md cursor-pointer"
               style={{ background: '#e0e7ff', color: '#4f46e5', border: '1px solid #c7d2fe' }}>
               ⏰ Lịch Ngày
             </button>
 
+            {/* DEADLINE */}
             <button onClick={() => setIsDeadlineModalOpen(true)}
               className="relative flex items-center gap-1.5 text-[11px] font-black uppercase px-4 py-2 rounded-xl transition-all shadow-sm hover:scale-105 hover:shadow-md cursor-pointer"
               style={{ background: urgentEvents.length > 0 ? '#fee2e2' : '#fef3c7', color: urgentEvents.length > 0 ? '#dc2626' : '#d97706', border: `1px solid ${urgentEvents.length > 0 ? '#fecaca' : '#fde68a'}` }}>
@@ -586,12 +668,39 @@ const GameRoadmap = ({ user }) => {
               )}
             </button>
 
+            {/* THÔNG BÁO */}
+            <div className="relative">
+              <button onClick={markNotifsRead} className="relative flex items-center justify-center w-8 h-8 rounded-xl bg-white border border-pink-200 text-pink-500 shadow-sm hover:scale-105 transition-all cursor-pointer">
+                🔔
+                {unreadNotifs > 0 && <span className="absolute -top-1 -right-1 bg-red-500 rounded-full w-4 h-4 text-white text-[9px] font-black flex items-center justify-center shadow-md animate-bounce">{unreadNotifs}</span>}
+              </button>
+              {isNotifOpen && (
+                <div className="absolute top-10 right-0 w-80 bg-white border-2 border-pink-100 rounded-2xl shadow-xl z-50 overflow-hidden flex flex-col">
+                  <div className="bg-pink-50 px-4 py-2 text-[12px] font-black text-pink-600 border-b border-pink-100">Thông báo của bạn</div>
+                  <div className="max-h-72 overflow-y-auto custom-scrollbar p-2 space-y-1">
+                    {notifications.length === 0 ? <div className="text-[12px] text-center text-slate-400 p-4">Chưa có thông báo nào.</div> :
+                     notifications.map(n => (
+                       <div key={n.id} className="flex gap-3 p-2 hover:bg-slate-50 rounded-xl transition-colors">
+                         <img src={n.fromAvatar} alt="" className="w-8 h-8 rounded-full object-cover border border-slate-200 shrink-0"/>
+                         <div className="text-[12px] text-slate-600 leading-snug">
+                           <span className="font-black text-slate-800">{n.fromName}</span> {n.text}
+                           <div className="text-[9px] text-slate-400 font-bold mt-1">{new Date(n.createdAt).toLocaleTimeString()} - {new Date(n.createdAt).toLocaleDateString()}</div>
+                         </div>
+                       </div>
+                     ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* CÀI ĐẶT */}
             <button onClick={() => { setProfileFormData(profile); setIsSettingsOpen(true); }}
               className="flex items-center gap-1.5 text-[11px] font-black uppercase px-4 py-2 rounded-xl transition-all shadow-sm hover:scale-105 hover:shadow-md cursor-pointer"
               style={{ background: '#ffffff', color: '#db2777', border: '1px solid #fbcfe8' }}>
               ⚙️ Cài đặt
             </button>
 
+            {/* LOGOUT */}
             <button onClick={handleLogout}
               className="flex items-center justify-center w-8 h-8 rounded-xl transition-all shadow-sm hover:scale-105 cursor-pointer"
               style={{ background: '#fee2e2', color: '#ef4444', border: '1px solid #fecaca' }}>
@@ -609,11 +718,12 @@ const GameRoadmap = ({ user }) => {
             {/* Profile Card */}
             <div className="relative rounded-2xl overflow-hidden flex-none h-[200px] shadow-sm border-2 border-pink-100 bg-white">
               <img src={profile.background} alt="bg" className="absolute inset-0 w-full h-full object-cover" />
-              <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(255,255,255,1) 0%, rgba(255,255,255,0.3) 60%, transparent 100%)' }}></div>
+              {/* Cập nhật Gradient Overlay để ảnh rõ hơn, bắt đầu mờ từ 40% */}
+              <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(255,255,255,1) 0%, rgba(255,255,255,0) 50%, transparent 100%)' }}></div>
               <div className="absolute bottom-0 left-0 right-0 p-4">
                 <div className="text-indigo-900 font-black text-[17px] leading-tight drop-shadow-sm">{profile.title}</div>
                 <div className="text-[12px] font-bold mt-0.5 text-pink-500 drop-shadow-sm">{profile.subtitle}</div>
-                {profile.bio && <div className="text-[11px] font-medium text-slate-600 mt-1.5 line-clamp-2 bg-white/60 p-1.5 rounded-lg backdrop-blur-sm border border-white">{profile.bio}</div>}
+                {profile.bio && <div className="text-[11px] font-medium text-slate-600 mt-1.5 line-clamp-2 bg-white/80 p-1.5 rounded-lg backdrop-blur-sm border border-white">{profile.bio}</div>}
               </div>
               <div className="md:hidden absolute inset-0 flex items-center justify-center bg-white/40 backdrop-blur-sm">
                 <button onClick={() => setShowMobileMap(true)}
@@ -685,29 +795,20 @@ const GameRoadmap = ({ user }) => {
 
           {/* ── TIMELINE ────────────────────────────────────────── */}
           <div className={`flex-1 flex flex-col rounded-2xl overflow-hidden shadow-sm bg-white border border-slate-200 ${showMobileMap ? 'flex' : 'hidden md:flex'}`}>
-
-            {/* Timeline Toolbar */}
             <div className="shrink-0 px-4 py-3 flex flex-wrap items-center gap-3 bg-white border-b border-slate-100 z-10">
-
               <button onClick={() => setShowMobileMap(false)}
                 className="md:hidden text-[10px] font-black px-3 py-1.5 rounded-lg bg-pink-100 text-pink-600 border border-pink-200 shadow-sm cursor-pointer">
                 ← Quay lại
               </button>
-
-              {/* Search */}
               <div className="relative flex-1 min-w-[140px] max-w-[220px]">
                 <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
                   placeholder="🔍 Tìm kiếm..."
                   className="w-full text-[12px] font-medium py-2 pl-3 pr-3 rounded-xl outline-none bg-slate-50 border border-slate-200 text-slate-700 focus:border-pink-300 focus:bg-white transition-all shadow-inner" />
               </div>
-
-              {/* Category Filter */}
               <div className="flex gap-1.5 overflow-x-auto custom-scrollbar pb-1 md:pb-0">
                 <button onClick={() => setFilterCat('all')}
                   className={`shrink-0 text-[11px] font-black px-3 py-1.5 rounded-xl transition-all shadow-sm cursor-pointer ${filterCat === 'all' ? 'bg-pink-100 text-pink-600 border-pink-300' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-                  style={{ border: `1px solid ${filterCat === 'all' ? '#f9a8d4' : '#e2e8f0'}` }}>
-                  Tất cả
-                </button>
+                  style={{ border: `1px solid ${filterCat === 'all' ? '#f9a8d4' : '#e2e8f0'}` }}>Tất cả</button>
                 {CATEGORIES.map(cat => (
                   <button key={cat.id} onClick={() => setFilterCat(cat.id === filterCat ? 'all' : cat.id)}
                     className="shrink-0 text-[11px] font-black px-3 py-1.5 rounded-xl transition-all shadow-sm cursor-pointer"
@@ -716,8 +817,6 @@ const GameRoadmap = ({ user }) => {
                   </button>
                 ))}
               </div>
-
-              {/* Status Filter */}
               <div className="flex gap-1.5">
                 {[{ id: 'all', label: '⭐ Tất cả' }, ...STATUSES.map(s => ({ id: s.id, label: s.icon + ' ' + s.label }))].map(s => (
                   <button key={s.id} onClick={() => setFilterStat(s.id === filterStat ? 'all' : s.id)}
@@ -727,43 +826,27 @@ const GameRoadmap = ({ user }) => {
                   </button>
                 ))}
               </div>
-
-              {/* Zoom */}
               <div className="flex items-center gap-1.5 ml-auto bg-slate-50 p-1 rounded-xl border border-slate-200 shadow-inner">
-                <button onClick={() => setZoomLevel(z => Math.max(0.4, +(z - 0.3).toFixed(1)))}
-                  className="w-7 h-7 bg-white rounded-lg flex items-center justify-center text-sm font-black text-slate-500 hover:text-pink-500 shadow-sm border border-slate-200 cursor-pointer">−</button>
+                <button onClick={() => setZoomLevel(z => Math.max(0.4, +(z - 0.3).toFixed(1)))} className="w-7 h-7 bg-white rounded-lg text-sm font-black text-slate-500 hover:text-pink-500 shadow-sm border border-slate-200 cursor-pointer">−</button>
                 <span className="text-[11px] font-black w-12 text-center text-indigo-600">{Math.round(zoomLevel * 100)}%</span>
-                <button onClick={() => setZoomLevel(z => Math.min(3, +(z + 0.3).toFixed(1)))}
-                  className="w-7 h-7 bg-white rounded-lg flex items-center justify-center text-sm font-black text-slate-500 hover:text-pink-500 shadow-sm border border-slate-200 cursor-pointer">+</button>
-                <button onClick={() => setZoomLevel(1)}
-                  className="text-[10px] px-3 h-7 rounded-lg font-black bg-pink-100 text-pink-600 shadow-sm border border-pink-200 ml-1 cursor-pointer">Reset</button>
+                <button onClick={() => setZoomLevel(z => Math.min(3, +(z + 0.3).toFixed(1)))} className="w-7 h-7 bg-white rounded-lg text-sm font-black text-slate-500 hover:text-pink-500 shadow-sm border border-slate-200 cursor-pointer">+</button>
+                <button onClick={() => setZoomLevel(1)} className="text-[10px] px-3 h-7 rounded-lg font-black bg-pink-100 text-pink-600 shadow-sm border border-pink-200 ml-1 cursor-pointer">Reset</button>
               </div>
             </div>
 
-            {/* Timeline Scroll Area */}
             <div className="flex-1 overflow-x-auto overflow-y-auto custom-scrollbar" ref={scrollContainerRef}>
               <div className="flex flex-col h-full relative" style={{ minWidth: `${totalDays * dayWidth}px` }}>
-
-                {/* Year Row */}
                 <div className="sticky top-0 z-40 shadow-sm">
                   <div className="h-6 flex text-[10px] font-black tracking-widest uppercase bg-pink-100 text-pink-600 border-b border-pink-200">
                     {yearsData.map((y, i) => (
-                      <div key={i} className="flex items-center justify-center border-r border-pink-200" style={{ width: `${(y.count / totalDays) * 100}%` }}>
-                        NĂM {y.year}
-                      </div>
+                      <div key={i} className="flex items-center justify-center border-r border-pink-200" style={{ width: `${(y.count / totalDays) * 100}%` }}>NĂM {y.year}</div>
                     ))}
                   </div>
-
-                  {/* Month Row */}
                   <div className="h-8 flex text-[12px] font-black bg-indigo-50 text-indigo-600 border-b border-indigo-100">
                     {monthsData.map((m, i) => (
-                      <div key={i} className="flex items-center justify-center border-r border-indigo-100" style={{ width: `${(m.count / totalDays) * 100}%` }}>
-                        THÁNG {m.month}
-                      </div>
+                      <div key={i} className="flex items-center justify-center border-r border-indigo-100" style={{ width: `${(m.count / totalDays) * 100}%` }}>THÁNG {m.month}</div>
                     ))}
                   </div>
-
-                  {/* Day Row */}
                   <div className="h-7 flex relative bg-white border-b border-slate-100">
                     {daysArray.map((date, idx) => {
                       if (idx % Math.max(1, Math.round(2 / zoomLevel)) !== 0 && idx !== totalDays) return null;
@@ -777,33 +860,24 @@ const GameRoadmap = ({ user }) => {
                   </div>
                 </div>
 
-                {/* Events Area */}
                 <div className="flex-1 relative overflow-hidden bg-white"
                   style={{ backgroundImage: `repeating-linear-gradient(to right, #f8fafc 0px, #f8fafc 1px, transparent 1px, transparent ${dayWidth * 7}px)`, backgroundSize: `${(7 / totalDays) * 100}% 100%` }}>
-
-                  {/* Today Line */}
                   {isNowVisible && (
                     <div className="absolute top-0 bottom-0 z-30 flex flex-col items-center" style={{ left: `${nowOffsetPercent}%` }}>
                       <div className="w-0.5 h-full bg-pink-400 shadow-[0_0_8px_rgba(244,114,182,0.6)]"></div>
-                      <div className="absolute top-2 text-[10px] font-black px-3 py-1 rounded-full whitespace-nowrap bg-pink-500 text-white shadow-md border-2 border-white">
-                        {todayLabel}
-                      </div>
+                      <div className="absolute top-2 text-[10px] font-black px-3 py-1 rounded-full whitespace-nowrap bg-pink-500 text-white shadow-md border-2 border-white">{todayLabel}</div>
                     </div>
                   )}
 
-                  {/* Empty State */}
                   {filteredEvents.length === 0 && (
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
                       <div className="text-center bg-white/60 p-6 rounded-3xl backdrop-blur-sm border border-slate-100 shadow-sm">
                         <div className="text-5xl mb-3">📅</div>
-                        <div className="text-[14px] font-black text-slate-500">
-                          {events.length === 0 ? 'Hãy bắt đầu thêm sự kiện mới tại mục Cài Đặt!' : 'Không tìm thấy kết quả phù hợp'}
-                        </div>
+                        <div className="text-[14px] font-black text-slate-500">Hãy bắt đầu thêm sự kiện mới tại mục Cài Đặt!</div>
                       </div>
                     </div>
                   )}
 
-                  {/* Event Bars */}
                   <div className="relative w-full h-full" style={{ paddingTop: '12px' }}>
                     {filteredEvents.map((event) => {
                       const leftPct  = Math.max(0, ((event.start.getTime() - startDate.getTime()) / totalDuration) * 100);
@@ -811,52 +885,32 @@ const GameRoadmap = ({ user }) => {
                       const widthPct = Math.min(rawWidth, 100 - leftPct);
                       const top      = event.trackRow * 76;
                       const cat      = getCat(event.category);
-                      const stat     = getStat(event.status);
                       const progress = getEventProgress(event);
                       const daysLeft = getDaysLeft(event);
                       const isUrgent = daysLeft >= 0 && daysLeft <= 3 && event.status !== 'done';
 
                       return (
                         <div
-                          key={event.id}
-                          onClick={() => setSelectedEventDetail(event)}
+                          key={event.id} onClick={() => setSelectedEventDetail(event)}
                           className="absolute h-[62px] flex items-center z-20 cursor-pointer group transition-all duration-200 hover:-translate-y-0.5 bg-white"
                           style={{
-                            left: `${leftPct}%`,
-                            width: `${widthPct}%`,
-                            minWidth: 'max-content',
-                            top: `${top}px`,
-                            border: `2px solid ${isUrgent ? '#f43f5e' : cat.border}`,
-                            borderRadius: '16px',
+                            left: `${leftPct}%`, width: `${widthPct}%`, minWidth: 'max-content', top: `${top}px`,
+                            border: `2px solid ${isUrgent ? '#f43f5e' : cat.border}`, borderRadius: '16px',
                             boxShadow: isUrgent ? `0 4px 15px rgba(244,63,94,0.3)` : '0 2px 10px rgba(0,0,0,0.05)',
                           }}>
-
-                          {/* Left accent */}
                           <div className="absolute left-0 top-0 bottom-0 w-2 rounded-l-xl" style={{ background: cat.color }}></div>
-
-                          {/* Thumbnail */}
                           <div className="w-[72px] md:w-[90px] h-full relative shrink-0 pl-3.5 pr-2 py-1.5">
                             <img src={event.image} alt="" className="w-full h-full object-cover rounded-xl shadow-sm border border-slate-100" style={{ opacity: event.status === 'done' ? 0.6 : 1 }} />
-                            {event.status === 'done' && (
-                              <div className="absolute inset-0 flex items-center justify-center">
-                                <span className="text-2xl drop-shadow-md">✅</span>
-                              </div>
-                            )}
+                            {event.status === 'done' && <div className="absolute inset-0 flex items-center justify-center"><span className="text-2xl drop-shadow-md">✅</span></div>}
                           </div>
-
-                          {/* Info */}
                           <div className="flex-1 min-w-0 py-1 flex flex-col justify-center pr-3">
                             <div className="flex items-center gap-1.5 mb-1">
                               <span className="text-[10px]">{getPri(event.priority).icon}</span>
-                              <span className="text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-wider" style={{ background: cat.bg, color: cat.text, border: `1px solid ${cat.border}` }}>
-                                {cat.label}
-                              </span>
+                              <span className="text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-wider" style={{ background: cat.bg, color: cat.text, border: `1px solid ${cat.border}` }}>{cat.label}</span>
                               {isUrgent && <span className="text-[9px] px-2 py-0.5 rounded-full font-black animate-pulse bg-red-100 text-red-600 border border-red-200">🔥 {daysLeft === 0 ? 'Hôm nay!' : `Còn ${daysLeft} ngày`}</span>}
                               {event.isShared && <span className="text-[9px] px-1.5 py-0.5 rounded-full font-black bg-pink-100 text-pink-500 border border-pink-200">📢</span>}
                             </div>
-                            <h4 className="font-black text-[13px] truncate text-slate-800" style={{ textDecoration: event.status === 'done' ? 'line-through' : 'none', color: event.status === 'done' ? '#94a3b8' : '#1e293b' }}>
-                              {event.title}
-                            </h4>
+                            <h4 className="font-black text-[13px] truncate text-slate-800" style={{ textDecoration: event.status === 'done' ? 'line-through' : 'none', color: event.status === 'done' ? '#94a3b8' : '#1e293b' }}>{event.title}</h4>
                             <div className="flex items-center gap-2 mt-1">
                               <div className="text-[10px] font-bold text-slate-400">{event.dateStr}</div>
                               {event.status === 'in-progress' && (
@@ -868,8 +922,6 @@ const GameRoadmap = ({ user }) => {
                               )}
                             </div>
                           </div>
-
-                          {/* Rewards */}
                           {event.rewards && (
                             <div className="hidden md:flex shrink-0 items-center h-[70%] border-l border-slate-100 px-3">
                               <div className="px-2.5 py-1.5 rounded-xl text-center bg-amber-50 border border-amber-100 shadow-inner">
@@ -927,8 +979,9 @@ const GameRoadmap = ({ user }) => {
                 <div className="space-y-6">
                   {/* Preview */}
                   <div className="relative h-32 rounded-3xl overflow-hidden border-[3px] border-white shadow-md bg-white">
-                    <img src={profileFormData.background} alt="bg" className="absolute inset-0 w-full h-full object-cover opacity-80" />
-                    <div className="absolute inset-0 bg-gradient-to-r from-white/90 to-transparent"></div>
+                    <img src={profileFormData.background} alt="bg" className="absolute inset-0 w-full h-full object-cover" />
+                    {/* Chỉnh lại gradient để nhìn rõ ảnh hơn */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-white/70 via-white/40 to-transparent"></div>
                     <div className="absolute inset-0 flex items-center gap-5 px-6">
                       <img src={profileFormData.avatar} alt="av" className="w-20 h-20 rounded-full object-cover border-4 border-white shadow-md bg-white" />
                       <div>
@@ -936,6 +989,13 @@ const GameRoadmap = ({ user }) => {
                         <div className="text-[12px] font-black font-mono px-3 py-1 rounded-full mt-2 inline-block bg-pink-100 text-pink-600 border border-pink-200 shadow-sm">ID: {profile.shortId}</div>
                       </div>
                     </div>
+                  </div>
+
+                  {/* Nút Xem Trang Công Khai của chính mình */}
+                  <div className="flex justify-end">
+                    <button onClick={() => handleViewFriendFeed(user.uid)} className="px-5 py-2.5 bg-indigo-50 border border-indigo-200 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-wider hover:bg-indigo-100 hover:scale-105 transition-all shadow-sm">
+                      👁️ Xem trang công khai của tôi
+                    </button>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -958,7 +1018,7 @@ const GameRoadmap = ({ user }) => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     {[
                       { key: 'avatar',     label: 'Ảnh đại diện (1:1)',  target: 'avatar' },
-                      { key: 'background', label: 'Ảnh nền (9:16)',      target: 'background' },
+                      { key: 'background', label: 'Ảnh nền (Tuỳ chỉnh)', target: 'background' }, // Đổi text ảnh nền
                     ].map(f => (
                       <div key={f.key}>
                         <label className="text-[11px] font-black uppercase mb-2 block text-pink-500">{f.label}</label>
@@ -1013,7 +1073,8 @@ const GameRoadmap = ({ user }) => {
                       className="w-full rounded-2xl px-4 py-3 text-sm font-semibold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-pink-400 focus:bg-white transition-all"
                       value={eventFormData.title} onChange={e => setEventFormData(p => ({ ...p, title: e.target.value }))} />
                     <div className="grid grid-cols-2 gap-4">
-                      {[{ key: 'startDate', label: 'Từ ngày' }, { key: 'endDate', label: 'Đến ngày' }].map(f => (
+                      {/* Đổi nhãn Từ Ngày -> Ngày */}
+                      {[{ key: 'startDate', label: 'Ngày' }, { key: 'endDate', label: 'Đến ngày' }].map(f => (
                         <div key={f.key}>
                           <label className="text-[10px] font-black uppercase mb-1.5 block text-indigo-400">{f.label}</label>
                           <input required type="date" className="w-full rounded-xl px-3 py-2.5 text-sm font-bold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-indigo-400 focus:bg-white transition-all"
@@ -1112,39 +1173,50 @@ const GameRoadmap = ({ user }) => {
                       className={`text-[11px] font-black px-4 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer ${dailyViewDate === todayYMD ? 'bg-indigo-600 text-white' : 'bg-white text-indigo-600 border border-indigo-200'}`}>Hôm nay</button>
                   </div>
 
-                  {/* Add Task Form */}
+                  {/* Form Lịch Ngày Update */}
                   <form onSubmit={handleAddDailyTask} className="bg-white p-5 rounded-3xl border-2 border-slate-100 shadow-sm flex flex-col gap-4">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end">
+                      {/* Ngày */}
                       <div className="col-span-2 md:col-span-1">
-                        <label className="text-[10px] font-black uppercase mb-1.5 block text-indigo-500">Từ ngày</label>
+                        <label className="text-[10px] font-black uppercase mb-1.5 block text-indigo-500">Ngày</label>
                         <input required type="date"
                           className="w-full rounded-2xl px-3 py-2.5 text-sm font-bold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-indigo-400 focus:bg-white transition-all cursor-pointer"
                           value={dailyForm.startDate} onChange={e => setDailyForm(p => ({ ...p, startDate: e.target.value }))} />
                       </div>
                       
-                      <div className="col-span-2 md:col-span-1">
-                        <label className="text-[10px] font-black uppercase mb-1.5 block text-indigo-500">Giờ (00-23)</label>
-                        <input required type="time"
-                          className="w-full rounded-2xl px-3 py-2.5 text-lg font-bold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-indigo-400 focus:bg-white transition-all text-center cursor-pointer"
-                          value={dailyForm.time} onChange={e => setDailyForm(p => ({ ...p, time: e.target.value }))} />
+                      {/* Bổ sung Khung chọn Giờ Kết Thúc */}
+                      <div className="col-span-2 md:col-span-1 flex gap-2">
+                        <div className="w-1/2">
+                          <label className="text-[10px] font-black uppercase mb-1.5 block text-indigo-500">Giờ BĐ</label>
+                          <input required type="time"
+                            className="w-full rounded-2xl px-2 py-2.5 text-sm font-bold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-indigo-400 focus:bg-white transition-all text-center cursor-pointer"
+                            value={dailyForm.time} onChange={e => setDailyForm(p => ({ ...p, time: e.target.value }))} />
+                        </div>
+                        <div className="w-1/2">
+                          <label className="text-[10px] font-black uppercase mb-1.5 block text-indigo-500">Giờ KT</label>
+                          <input type="time"
+                            className="w-full rounded-2xl px-2 py-2.5 text-sm font-bold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-indigo-400 focus:bg-white transition-all text-center cursor-pointer"
+                            value={dailyForm.endTime} onChange={e => setDailyForm(p => ({ ...p, endTime: e.target.value }))} />
+                        </div>
                       </div>
                       
+                      {/* Chu kỳ lặp */}
                       <div className="col-span-2">
                         <label className="text-[10px] font-black uppercase mb-1.5 block text-indigo-500">Chu kỳ lặp</label>
                         <select
-                          className="w-full rounded-2xl px-3 py-3 text-[13px] font-bold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-indigo-400 cursor-pointer"
+                          className="w-full rounded-2xl px-3 py-2.5 text-[13px] font-bold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-indigo-400 cursor-pointer"
                           value={dailyForm.repeat} onChange={e => setDailyForm(p => ({ ...p, repeat: e.target.value }))}>
                           <option value="none">Không lặp lại</option>
                           <option value="daily">Mỗi ngày</option>
                           <option value="weekly">Mỗi tuần</option>
                           <option value="biweekly">Mỗi 2 tuần</option>
                           <option value="yearly">Mỗi năm</option>
-                          <option value="custom">Tùy chỉnh (Số ngày)</option>
+                          <option value="custom">Tùy chỉnh (Số ngày lặp)</option>
                         </select>
                       </div>
                     </div>
 
-                    <div className="flex flex-col md:flex-row gap-4 items-end">
+                    <div className="flex flex-col md:flex-row gap-4 items-end mt-2">
                       <div className="flex-1 w-full relative">
                         <label className="text-[10px] font-black uppercase mb-1.5 block text-indigo-500">Nội dung công việc</label>
                         <input required type="text" placeholder="Ví dụ: Tập thể dục..."
@@ -1158,8 +1230,8 @@ const GameRoadmap = ({ user }) => {
                       </div>
 
                       {dailyForm.repeat === 'custom' && (
-                        <div className="w-full md:w-24">
-                          <label className="text-[10px] font-black uppercase mb-1.5 block text-indigo-500">Số ngày</label>
+                        <div className="w-full md:w-28">
+                          <label className="text-[10px] font-black uppercase mb-1.5 block text-indigo-500">Số ngày lặp</label>
                           <input required type="number" min="2" max="365"
                             className="w-full rounded-2xl px-3 py-3 text-sm font-bold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-indigo-400 focus:bg-white transition-all text-center"
                             value={dailyForm.customDays} onChange={e => setDailyForm(p => ({ ...p, customDays: e.target.value }))} />
@@ -1173,7 +1245,7 @@ const GameRoadmap = ({ user }) => {
                     </div>
                   </form>
 
-                  {/* Task List (Cài đặt) */}
+                  {/* Danh sách Task Cài đặt */}
                   <div className="rounded-3xl p-5 bg-white border-2 border-slate-100 shadow-sm">
                     <div className="text-[13px] font-black uppercase text-indigo-500 mb-4 flex items-center gap-2">
                       <span className="text-xl">⏰</span> Lịch trình ngày {dailyViewDate} ({filteredSettingsDailySchedule.length})
@@ -1195,8 +1267,8 @@ const GameRoadmap = ({ user }) => {
                                 ✔
                               </button>
                               
-                              <div className={`text-[13px] md:text-[15px] font-black font-mono px-2 md:px-3 py-1.5 rounded-xl border shrink-0 ${isDoneOnThisDate ? 'bg-slate-100 text-slate-400 border-slate-200' : 'bg-indigo-50 text-indigo-600 border-indigo-200'}`}>
-                                {item.time}
+                              <div className={`text-[12px] md:text-[14px] font-black font-mono px-2 md:px-3 py-1.5 rounded-xl border shrink-0 text-center ${isDoneOnThisDate ? 'bg-slate-100 text-slate-400 border-slate-200' : 'bg-indigo-50 text-indigo-600 border-indigo-200'}`}>
+                                {item.time} {item.endTime && <><br/><span className="text-[10px] text-slate-400">{item.endTime}</span></>}
                               </div>
                               
                               <div className="flex-1 min-w-0">
@@ -1273,7 +1345,7 @@ const GameRoadmap = ({ user }) => {
       )}
 
       {/* ════════════════════════════════════════════════════════
-          MODAL XEM LỊCH NGÀY NHANH (Thay cho Thống Kê)
+          MODAL XEM LỊCH NGÀY NHANH
       ════════════════════════════════════════════════════════ */}
       {isDailyModalOpen && (
         <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(10px)' }} onClick={() => setIsDailyModalOpen(false)}>
@@ -1287,8 +1359,6 @@ const GameRoadmap = ({ user }) => {
               
               {/* Toolbar điều hướng ngày */}
               <div className="flex flex-col sm:flex-row items-center gap-3 bg-white p-3 rounded-2xl border-2 border-indigo-50 shadow-sm">
-                
-                {/* Chọn ngày từ Dropdown (Các ngày đã đặt lịch) */}
                 <select 
                   className="w-full sm:w-auto px-4 py-2.5 rounded-xl border-2 border-indigo-100 outline-none font-black text-indigo-700 bg-indigo-50/50 cursor-pointer text-sm"
                   value={quickViewDate}
@@ -1304,7 +1374,6 @@ const GameRoadmap = ({ user }) => {
 
                 <div className="hidden sm:block w-px h-8 bg-slate-200 mx-1"></div>
 
-                {/* Chọn ngày tuỳ ý & Điều hướng nhanh */}
                 <div className="flex items-center gap-2 w-full sm:w-auto">
                   <button onClick={() => {
                     const d = new Date(quickViewDate); d.setDate(d.getDate() - 1);
@@ -1352,8 +1421,8 @@ const GameRoadmap = ({ user }) => {
                             ✔
                           </button>
                           
-                          <div className={`text-[14px] font-black font-mono px-2.5 py-1 rounded-xl border shrink-0 ${isDone ? 'bg-slate-100 text-slate-400 border-slate-200' : 'bg-indigo-50 text-indigo-600 border-indigo-200'}`}>
-                            {item.time}
+                          <div className={`text-[12px] md:text-[14px] font-black font-mono px-2 py-1 rounded-xl border shrink-0 text-center ${isDone ? 'bg-slate-100 text-slate-400 border-slate-200' : 'bg-indigo-50 text-indigo-600 border-indigo-200'}`}>
+                            {item.time} {item.endTime && <><br/><span className="text-[10px] opacity-70">{item.endTime}</span></>}
                           </div>
                           
                           <div className="flex-1 min-w-0 flex flex-col md:flex-row md:items-center justify-between gap-2">
@@ -1366,7 +1435,7 @@ const GameRoadmap = ({ user }) => {
                               )}
                             </div>
                             
-                            {/* 🔥 Nút điều chỉnh Công khai trực tiếp ở ngoài */}
+                            {/* Công khai / Riêng tư Toggle */}
                             <button onClick={() => handleToggleShareDailyTask(item.id)}
                               className={`shrink-0 text-[10px] font-black px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${item.isShared ? 'bg-pink-100 text-pink-600 border-pink-200 hover:bg-pink-200' : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'}`}>
                               {item.isShared ? '📢 Công khai' : '🔒 Riêng tư'}
@@ -1385,9 +1454,7 @@ const GameRoadmap = ({ user }) => {
         </div>
       )}
 
-      {/* ════════════════════════════════════════════════════════
-          EVENT DETAIL MODAL
-      ════════════════════════════════════════════════════════ */}
+      {/* EVENT DETAIL & DEADLINE MODALS... */}
       {selectedEventDetail && (
         <div className="fixed inset-0 flex items-center justify-center z-[120] p-4" style={{ background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)' }} onClick={() => setSelectedEventDetail(null)}>
           <div className="w-full max-w-[420px] rounded-[2rem] overflow-hidden shadow-[0_20px_60px_rgba(0,0,0,0.1)] bg-white relative flex flex-col" onClick={e => e.stopPropagation()}
@@ -1516,12 +1583,13 @@ const GameRoadmap = ({ user }) => {
         </div>
       )}
 
+      {/* CROP MODAL */}
       {isCropModalOpen && upImg && (
         <div className="fixed inset-0 flex flex-col items-center justify-center z-[100] p-4" style={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(15px)' }}>
           <div className="text-center mb-6">
             <h2 className="text-indigo-900 font-black text-2xl uppercase tracking-wide drop-shadow-sm">Cắt Ảnh</h2>
             <p className="text-[11px] mt-2 px-4 py-1.5 rounded-full inline-block font-bold bg-indigo-50 text-indigo-500 border border-indigo-200 shadow-sm">
-              Khung hình đã được khóa tỉ lệ tiêu chuẩn.
+              Kéo thả khung để căn chỉnh ảnh của bạn
             </p>
           </div>
           <div className="rounded-3xl overflow-hidden p-2 bg-white shadow-[0_20px_50px_rgba(99,102,241,0.15)] border-[3px] border-indigo-100" style={{ maxWidth: '95%' }}>
@@ -1543,16 +1611,16 @@ const GameRoadmap = ({ user }) => {
       )}
 
       {/* ════════════════════════════════════════════════════════
-          FRIEND FEED MODAL
+          TRANG CÔNG KHAI / FRIEND FEED MODAL
       ════════════════════════════════════════════════════════ */}
       {viewingFriendFeed && (
         <div className="fixed inset-0 flex items-center justify-center z-[130] p-2 md:p-4" style={{ background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)' }} onClick={() => setViewingFriendFeed(null)}>
-          <div className="w-full max-w-[560px] h-[90vh] rounded-[2.5rem] flex flex-col overflow-hidden bg-white border-[4px] border-pink-200 shadow-[0_20px_60px_rgba(236,72,153,0.15)] relative" onClick={e => e.stopPropagation()}>
+          <div className="w-full max-w-[560px] h-[90vh] rounded-[2.5rem] flex flex-col overflow-hidden bg-slate-50 border-[4px] border-pink-200 shadow-[0_20px_60px_rgba(236,72,153,0.15)] relative" onClick={e => e.stopPropagation()}>
 
             {/* Cover */}
             <div className="relative h-48 shrink-0 bg-pink-50 p-2">
-              <div className="w-full h-full rounded-[2rem] overflow-hidden relative border-2 border-white shadow-inner">
-                <img src={viewingFriendFeed.profile.background} alt="bg" className="absolute inset-0 w-full h-full object-cover opacity-60 blur-[2px]" />
+              <div className="w-full h-full rounded-[2rem] overflow-hidden relative border-2 border-white shadow-inner bg-white">
+                <img src={viewingFriendFeed.profile.background} alt="bg" className="absolute inset-0 w-full h-full object-cover" />
                 <div className="absolute inset-0 bg-gradient-to-t from-white/90 via-white/20 to-transparent"></div>
               </div>
               <button onClick={() => setViewingFriendFeed(null)}
@@ -1567,44 +1635,88 @@ const GameRoadmap = ({ user }) => {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto pt-16 px-6 pb-6 custom-scrollbar space-y-6 bg-slate-50/50">
+            <div className="flex-1 overflow-y-auto pt-16 px-4 md:px-6 pb-6 custom-scrollbar space-y-6">
               
-              {viewingFriendFeed.daily && viewingFriendFeed.daily.length > 0 && (
-                <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-3xl shadow-sm">
-                  <h4 className="text-[11px] font-black text-indigo-500 uppercase mb-3 flex items-center gap-1.5">
-                    <span className="text-sm">⏰</span> Lịch trình hôm nay ({viewingFriendFeed.viewDate})
-                  </h4>
-                  <div className="space-y-2">
+              {/* LỊCH NGÀY PUBLIC */}
+              <div>
+                <h4 className="text-[11px] font-black text-indigo-500 uppercase mb-3 flex items-center gap-1.5 ml-2">
+                  <span className="text-sm">⏰</span> Lịch trình hôm nay ({viewingFriendFeed.viewDate})
+                </h4>
+                {(!viewingFriendFeed.daily || viewingFriendFeed.daily.length === 0) ? (
+                  <div className="text-center py-6 bg-white rounded-3xl border-2 border-dashed border-indigo-100 text-[12px] font-bold text-slate-400">
+                    Hôm nay rảnh rỗi, chưa có lịch trình nào.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
                     {viewingFriendFeed.daily.map(t => {
                       const isDone = t.completedDates?.includes(viewingFriendFeed.viewDate);
+                      const myReaction = (t.reactions || {})[user?.uid];
                       return (
-                        <div key={t.id} className={`flex items-center gap-3 p-2.5 rounded-2xl border bg-white ${isDone ? 'border-slate-100 opacity-60' : 'border-indigo-100'}`}>
-                          <div className={`text-[12px] font-black font-mono px-2 py-1 rounded-lg ${isDone ? 'bg-slate-100 text-slate-400' : 'bg-indigo-100 text-indigo-600'}`}>{t.time}</div>
-                          <div className={`text-[13px] font-bold flex-1 truncate ${isDone ? 'line-through text-slate-400' : 'text-slate-700'}`}>{t.task}</div>
-                          {isDone && <span className="text-emerald-500 text-sm font-black mr-2">✔</span>}
+                        <div key={t.id} className="bg-white rounded-3xl border border-indigo-100 shadow-sm p-4 hover:shadow-md transition-all">
+                          <div className={`flex items-center gap-3 ${isDone ? 'opacity-60' : ''}`}>
+                            <div className={`text-[12px] md:text-[14px] font-black font-mono px-2 py-1 rounded-lg text-center ${isDone ? 'bg-slate-100 text-slate-400' : 'bg-indigo-100 text-indigo-600'}`}>
+                              {t.time} {t.endTime && <><br/><span className="text-[9px]">{t.endTime}</span></>}
+                            </div>
+                            <div className={`text-[13px] md:text-[14px] font-bold flex-1 ${isDone ? 'line-through text-slate-400' : 'text-slate-700'}`}>{t.task}</div>
+                            {isDone && <span className="text-emerald-500 text-lg font-black mr-2">✔</span>}
+                          </div>
+                          
+                          {/* REACTION BAR */}
+                          <div className="mt-3 flex flex-wrap gap-2 items-center bg-slate-50 p-2 rounded-xl border border-slate-100">
+                            {REACTIONS.map(emo => (
+                              <button key={emo} onClick={() => handleInteract(viewingFriendFeed.uid, t.id, 'daily', 'reaction', emo)}
+                                className={`text-[12px] px-2 py-1 rounded-lg transition-transform hover:scale-110 cursor-pointer ${myReaction === emo ? 'bg-indigo-100 border border-indigo-300' : 'bg-white border border-slate-200 hover:bg-slate-100'}`}>
+                                {emo} {Object.values(t.reactions || {}).filter(r => r === emo).length > 0 && <span className="ml-1 text-[10px] font-black text-indigo-500">{Object.values(t.reactions || {}).filter(r => r === emo).length}</span>}
+                              </button>
+                            ))}
+                          </div>
+                          {/* COMMENTS */}
+                          {t.comments && t.comments.length > 0 && (
+                            <div className="mt-3 space-y-2 max-h-40 overflow-y-auto custom-scrollbar bg-slate-50 p-2 rounded-xl">
+                              {t.comments.map(c => (
+                                <div key={c.id} className="flex gap-2 bg-white p-2 rounded-lg border border-slate-100 shadow-sm">
+                                  <img src={c.avatar} alt="av" className="w-6 h-6 rounded-full object-cover shrink-0" />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-[10px] font-black text-indigo-900">{c.displayName} <span className="text-slate-400 font-normal ml-1">{new Date(c.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span></div>
+                                    <div className="text-[11px] text-slate-700 mt-0.5 break-words">{c.text}</div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <div className="mt-2 flex gap-2">
+                            <input type="text" placeholder="Bình luận..." value={commentInputs[t.id] || ''} onChange={e => setCommentInputs(p => ({...p, [t.id]: e.target.value}))}
+                              className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-[11px] font-medium outline-none focus:border-indigo-300" 
+                              onKeyDown={e => { if(e.key==='Enter' && commentInputs[t.id]?.trim()){ handleInteract(viewingFriendFeed.uid, t.id, 'daily', 'comment', commentInputs[t.id]); } }}/>
+                            <button onClick={() => { if(commentInputs[t.id]?.trim()){ handleInteract(viewingFriendFeed.uid, t.id, 'daily', 'comment', commentInputs[t.id]); } }}
+                              className="px-3 py-1.5 bg-indigo-500 text-white rounded-xl text-[10px] font-black hover:bg-indigo-600 transition-colors cursor-pointer">Gửi</button>
+                          </div>
                         </div>
                       )
                     })}
                   </div>
-                </div>
-              )}
+                )}
+              </div>
 
-              <div>
+              {/* SỰ KIỆN DÀI HẠN PUBLIC */}
+              <div className="pt-4 border-t-2 border-dashed border-pink-200">
                 <h4 className="text-[11px] font-black text-pink-500 uppercase mb-4 flex items-center gap-1.5 ml-2">
-                  <span className="text-sm">📅</span> Sự kiện lớn sắp tới
+                  <span className="text-sm">📅</span> Sự kiện lớn
                 </h4>
                 {viewingFriendFeed.events.length === 0 ? (
-                  <div className="text-center py-10 bg-white rounded-3xl border-2 border-dashed border-pink-100">
-                    <div className="text-5xl mb-4">💤</div>
-                    <div className="text-[14px] font-black text-slate-400">Người dùng này chưa chia sẻ sự kiện nào.</div>
+                  <div className="text-center py-8 bg-white rounded-3xl border-2 border-dashed border-pink-100">
+                    <div className="text-4xl mb-3">💤</div>
+                    <div className="text-[12px] font-bold text-slate-400">Người dùng này chưa chia sẻ sự kiện nào.</div>
                   </div>
                 ) : (
                   <div className="relative border-l-[3px] border-pink-200 ml-4 space-y-6">
                     {viewingFriendFeed.events.map(ev => {
                       const cat = getCat(ev.category);
+                      const myReaction = (ev.reactions || {})[user?.uid];
                       return (
                         <div key={ev.id} className="relative pl-7">
                           <div className="absolute -left-[11px] top-4 w-5 h-5 bg-pink-400 rounded-full border-[4px] border-white shadow-md flex items-center justify-center"></div>
+                          
                           <div className="bg-white border-2 border-pink-100 rounded-3xl p-4 shadow-sm hover:shadow-md transition-shadow hover:-translate-y-0.5">
                             <div className="flex items-center gap-2 mb-3">
                               <div className="text-[10px] font-black text-white bg-pink-400 inline-block px-2.5 py-1 rounded-lg shadow-sm">{ev.dateStr}</div>
@@ -1615,6 +1727,37 @@ const GameRoadmap = ({ user }) => {
                             {ev.rewards && (
                               <p className="mt-3 text-[12px] text-amber-700 font-bold bg-amber-50 p-2.5 rounded-xl border border-amber-100 flex items-center gap-2 shadow-inner"><span className="text-lg">⭐</span> {ev.rewards}</p>
                             )}
+
+                            {/* REACTION BAR EVENT */}
+                            <div className="mt-4 flex flex-wrap gap-2 items-center bg-pink-50 p-2 rounded-xl border border-pink-100">
+                              {REACTIONS.map(emo => (
+                                <button key={emo} onClick={() => handleInteract(viewingFriendFeed.uid, ev.id, 'event', 'reaction', emo)}
+                                  className={`text-[12px] px-2 py-1 rounded-lg transition-transform hover:scale-110 cursor-pointer ${myReaction === emo ? 'bg-pink-200 border border-pink-300' : 'bg-white border border-slate-200 hover:bg-pink-100'}`}>
+                                  {emo} {Object.values(ev.reactions || {}).filter(r => r === emo).length > 0 && <span className="ml-1 text-[10px] font-black text-pink-500">{Object.values(ev.reactions || {}).filter(r => r === emo).length}</span>}
+                                </button>
+                              ))}
+                            </div>
+                            {/* COMMENTS EVENT */}
+                            {ev.comments && ev.comments.length > 0 && (
+                              <div className="mt-3 space-y-2 max-h-40 overflow-y-auto custom-scrollbar bg-slate-50 p-2 rounded-xl">
+                                {ev.comments.map(c => (
+                                  <div key={c.id} className="flex gap-2 bg-white p-2 rounded-lg border border-slate-100 shadow-sm">
+                                    <img src={c.avatar} alt="av" className="w-6 h-6 rounded-full object-cover shrink-0" />
+                                    <div className="flex-1 min-w-0">
+                                      <div className="text-[10px] font-black text-pink-900">{c.displayName} <span className="text-slate-400 font-normal ml-1">{new Date(c.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span></div>
+                                      <div className="text-[11px] text-slate-700 mt-0.5 break-words">{c.text}</div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                            <div className="mt-2 flex gap-2">
+                              <input type="text" placeholder="Bình luận..." value={commentInputs[ev.id] || ''} onChange={e => setCommentInputs(p => ({...p, [ev.id]: e.target.value}))}
+                                className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-[11px] font-medium outline-none focus:border-pink-300" 
+                                onKeyDown={e => { if(e.key==='Enter' && commentInputs[ev.id]?.trim()){ handleInteract(viewingFriendFeed.uid, ev.id, 'event', 'comment', commentInputs[ev.id]); } }}/>
+                              <button onClick={() => { if(commentInputs[ev.id]?.trim()){ handleInteract(viewingFriendFeed.uid, ev.id, 'event', 'comment', commentInputs[ev.id]); } }}
+                                className="px-3 py-1.5 bg-pink-500 text-white rounded-xl text-[10px] font-black hover:bg-pink-600 transition-colors cursor-pointer">Gửi</button>
+                            </div>
                           </div>
                         </div>
                       )
@@ -1622,6 +1765,7 @@ const GameRoadmap = ({ user }) => {
                   </div>
                 )}
               </div>
+
             </div>
           </div>
         </div>
