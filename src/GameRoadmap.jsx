@@ -93,8 +93,6 @@ const GameRoadmap = ({ user }) => {
   // ── 2. STATE & FIRESTORE ───────────────────────────────────
   const [showMobileMap,       setShowMobileMap]       = useState(false);
   const [selectedEventDetail, setSelectedEventDetail] = useState(null);
-  const [isDeadlineModalOpen, setIsDeadlineModalOpen] = useState(false);
-  
   const [isDailyModalOpen,    setIsDailyModalOpen]    = useState(false);
   const [quickViewDate,       setQuickViewDate]       = useState(todayYMD);
 
@@ -104,7 +102,7 @@ const GameRoadmap = ({ user }) => {
     avatar:      "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200",
     background:  "https://images.unsplash.com/photo-1541562232579-512a21360020?q=80&w=800",
     title:       "TỔNG QUAN LỊCH TRÌNH",
-    subtitle:    "v8.2",
+    subtitle:    "v9.0",
     displayName: "Người dùng mới",
     shortId:     "........",
     bio:         "",
@@ -112,6 +110,7 @@ const GameRoadmap = ({ user }) => {
 
   const [events,        setEvents]        = useState([]);
   const [dailySchedule, setDailySchedule] = useState([]);
+  const [specialEvents, setSpecialEvents] = useState([]); // State Mới: Kỷ niệm, Sinh nhật...
   const [friendsList,   setFriendsList]   = useState([]);
   const [friendsData,   setFriendsData]   = useState([]);
   const [notifications, setNotifications] = useState([]);
@@ -120,7 +119,7 @@ const GameRoadmap = ({ user }) => {
   const [searchFriendId,    setSearchFriendId]    = useState('');
   const [viewingFriendFeed, setViewingFriendFeed] = useState(null);
   const [commentInputs,     setCommentInputs]     = useState({});
-  const [replyingTo,        setReplyingTo]        = useState({}); // Lưu trạng thái đang Reply ai
+  const [replyingTo,        setReplyingTo]        = useState({}); 
   const [isLoading,         setIsLoading]         = useState(true);
 
   useEffect(() => {
@@ -168,14 +167,15 @@ const GameRoadmap = ({ user }) => {
           }));
           setDailySchedule(patchedDaily);
         }
-        
+
+        if (data.specialEvents) setSpecialEvents(data.specialEvents);
         if (data.friends) setFriendsList(data.friends);
         if (data.notifications) setNotifications(data.notifications.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)));
 
       } else {
         const newProfile = { ...profile, shortId: generateID() };
         setProfile(newProfile);
-        saveToCloud(newProfile, events, [], [], []);
+        saveToCloud(newProfile, events, [], [], [], []);
       }
       setIsLoading(false);
     });
@@ -200,7 +200,7 @@ const GameRoadmap = ({ user }) => {
     fetchFriendsData();
   }, [friendsList]);
 
-  const saveToCloud = async (newProfile, newEvents, newFriends = friendsList, newDaily = dailySchedule, newNotifs = notifications) => {
+  const saveToCloud = async (newProfile, newEvents, newFriends = friendsList, newDaily = dailySchedule, newNotifs = notifications, newSpecials = specialEvents) => {
     if (!user) return;
     try {
       await setDoc(doc(db, "users", user.uid), { 
@@ -208,7 +208,8 @@ const GameRoadmap = ({ user }) => {
         events: newEvents, 
         friends: newFriends,
         dailySchedule: newDaily,
-        notifications: newNotifs
+        notifications: newNotifs,
+        specialEvents: newSpecials
       }, { merge: true });
     } catch (error) { console.error("Lỗi đồng bộ:", error); }
   };
@@ -255,6 +256,42 @@ const GameRoadmap = ({ user }) => {
       .sort((a, b) => (a.time || "00:00").localeCompare(b.time || "00:00")); 
   }, [dailySchedule, quickViewDate]);
 
+  // ── SIDEBAR SPECIAL EVENTS LOGIC ──
+  const { todaySpecials, nextSpecial } = useMemo(() => {
+    const td = new Date();
+    const tMonth = td.getMonth() + 1;
+    const tDay = td.getDate();
+
+    const todayList = [];
+    let nextEvt = null;
+    let minDiff = Infinity;
+
+    specialEvents.forEach(ev => {
+        const d = new Date(ev.date);
+        const m = d.getMonth() + 1;
+        const day = d.getDate();
+
+        if (m === tMonth && day === tDay) {
+            todayList.push(ev);
+        }
+
+        // Tìm lần xuất hiện tiếp theo
+        const nextDate = new Date(td.getFullYear(), m - 1, day);
+        if (nextDate < td && (m !== tMonth || day !== tDay)) {
+            nextDate.setFullYear(td.getFullYear() + 1);
+        }
+
+        const diff = nextDate.getTime() - td.getTime();
+        // Cần tìm event gần nhất trong tương lai (>0)
+        if (diff > 0 && diff < minDiff) {
+            minDiff = diff;
+            nextEvt = { ...ev, nextDate, daysLeft: Math.ceil(diff / (1000 * 3600 * 24)) };
+        }
+    });
+
+    return { todaySpecials: todayList, nextSpecial: nextEvt };
+  }, [specialEvents]);
+
   // ── 5. SETTINGS MODAL STATE ────────────────────────────────
   const [isSettingsOpen,   setIsSettingsOpen]   = useState(false);
   const [activeTab,        setActiveTab]        = useState('profile');
@@ -268,6 +305,8 @@ const GameRoadmap = ({ user }) => {
   const [dailyForm, setDailyForm] = useState({ 
     startDate: todayYMD, time: '', endTime: '', task: '', repeat: 'none', customDays: 1, isShared: false 
   });
+
+  const [specialForm, setSpecialForm] = useState({ title: '', date: todayYMD, type: 'birthday' });
 
   const filteredSettingsDailySchedule = useMemo(() => {
     return dailySchedule
@@ -470,6 +509,29 @@ const GameRoadmap = ({ user }) => {
     saveToCloud(profile, events, friendsList, updated);
   };
 
+  // ── HANDLERS CHO SỰ KIỆN ĐẶC BIỆT ──
+  const handleAddSpecialEvent = (e) => {
+    e.preventDefault();
+    if (!specialForm.title || !specialForm.date) return;
+    const newEvt = {
+      id: "sp_" + Date.now(),
+      title: specialForm.title,
+      date: specialForm.date,
+      type: specialForm.type
+    };
+    const updated = [...specialEvents, newEvt].sort((a,b) => new Date(a.date) - new Date(b.date));
+    setSpecialEvents(updated);
+    saveToCloud(profile, events, friendsList, dailySchedule, notifications, updated);
+    setSpecialForm({ title: '', date: todayYMD, type: 'birthday' });
+  };
+
+  const handleDeleteSpecialEvent = (id) => {
+    const updated = specialEvents.filter(x => x.id !== id);
+    setSpecialEvents(updated);
+    saveToCloud(profile, events, friendsList, dailySchedule, notifications, updated);
+  };
+
+  // ── BẠN BÈ ──
   const handleAddFriend = async (e) => {
     e.preventDefault();
     if (searchFriendId === profile.shortId) { alert("Bạn không thể tự kết bạn với chính mình!"); return; }
@@ -521,17 +583,14 @@ const GameRoadmap = ({ user }) => {
           replyToName: replyData ? replyData.displayName : null
         });
 
-        // Xóa form nhập và huỷ trạng thái reply
         setCommentInputs(p => ({ ...p, [itemId]: '' })); 
         setReplyingTo(p => { const newP = {...p}; delete newP[itemId]; return newP; });
         
-        // Chuẩn bị Text Thông báo cho Chủ Bài Viết
         notifMsgForOwner = (replyData && replyData.uid !== targetUid) 
           ? `đã bình luận trong bài viết của bạn: "${payload}"` 
           : (replyData ? `đã trả lời bình luận của bạn: "${payload}"` : `đã bình luận: "${payload}"`);
       }
 
-      // 1. Gửi thông báo cho CHỦ BÀI VIẾT (nếu người thao tác không phải chủ)
       if (targetUid !== user.uid && notifMsgForOwner) {
         notifs.push({
           id: Date.now().toString() + "_1",
@@ -546,13 +605,11 @@ const GameRoadmap = ({ user }) => {
         });
       }
 
-      // Lưu lại dữ liệu cho Chủ bài viết
       await setDoc(docRef, { 
         [itemType === 'event' ? 'events' : 'dailySchedule']: targetList,
         notifications: notifs
       }, { merge: true });
 
-      // 2. Gửi thông báo chéo cho NGƯỜI ĐƯỢC REPLY (Nếu có reply và người đó KHÔNG PHẢI chủ bài viết, KHÔNG PHẢI chính mình)
       if (actionType === 'comment' && replyData && replyData.uid !== user.uid && replyData.uid !== targetUid) {
         const repliedUserRef = doc(db, "users", replyData.uid);
         const repliedUserSnap = await getDoc(repliedUserRef);
@@ -574,7 +631,6 @@ const GameRoadmap = ({ user }) => {
         }
       }
 
-      // Update View Live (Dành cho trang Friend Feed)
       if (viewingFriendFeed && viewingFriendFeed.uid === targetUid) {
         setViewingFriendFeed(prev => {
           const newFeed = {...prev};
@@ -615,6 +671,7 @@ const GameRoadmap = ({ user }) => {
     setIsSettingsOpen(false);
   };
 
+  // 🔥 Xử lý click vào Thông báo
   const handleNotifClick = (notif) => {
     const updated = notifications.map(n => n.id === notif.id ? {...n, read: true} : n);
     setNotifications(updated);
@@ -628,7 +685,9 @@ const GameRoadmap = ({ user }) => {
     } else if (notif.itemType === 'daily') {
       const dl = dailySchedule.find(d => d.id === notif.itemId);
       if (dl) {
-        setQuickViewDate(dl.startDate);
+        // Lấy ngày tương tác thay vì ngày gốc của task lặp
+        const interactDate = formatDateToYMD(notif.createdAt);
+        setQuickViewDate(interactDate);
         setIsDailyModalOpen(true);
       }
     }
@@ -646,23 +705,12 @@ const GameRoadmap = ({ user }) => {
   const handleLogout = () => signOut(auth).catch(console.error);
 
   // ── 8. HELPERS ─────────────────────────────────────────────
-  const getDaysLeft = (ev) => Math.ceil((ev.end.getTime() - now.getTime()) / 86400000);
   const getEventProgress = (ev) => {
     if (ev.status === 'done') return 100;
     if (ev.status === 'todo') return 0;
     return ev.progress || 0;
   };
 
-  const stats = useMemo(() => {
-    const total     = events.length;
-    const done      = events.filter(e => e.status === 'done').length;
-    const inProg    = events.filter(e => e.status === 'in-progress').length;
-    const upcoming  = events.filter(e => e.start > now).length;
-    const catBreakdown = CATEGORIES.map(c => ({ ...c, count: events.filter(e => e.category === c.id).length }));
-    return { total, done, inProg, upcoming, catBreakdown };
-  }, [events]);
-
-  const urgentEvents = events.filter(ev => { const d = getDaysLeft(ev); return d >= 0 && d <= 3; });
   const unreadNotifs = notifications.filter(n => n && n.read === false).length;
 
   // ── 9. RENDER ──────────────────────────────────────────────
@@ -682,8 +730,8 @@ const GameRoadmap = ({ user }) => {
       <div className="w-full max-w-[1500px] h-[96vh] md:h-[820px] rounded-3xl flex flex-col relative overflow-hidden"
         style={{ background: 'rgba(255, 255, 255, 0.95)', border: '2px solid #fbcfe8', boxShadow: '0 10px 40px rgba(236, 72, 153, 0.15)' }}>
 
-        {/* ═══ HEADER (Z-INDEX CAO) ═══════════════════════════ */}
-        <div className="h-16 flex items-center justify-between px-4 border-b shrink-0 shadow-sm z-[100] relative"
+        {/* ═══ HEADER (Z-INDEX 40) ═══════════════════════════ */}
+        <div className="h-16 flex items-center justify-between px-4 border-b shrink-0 shadow-sm z-40 relative"
           style={{ background: 'linear-gradient(90deg, #fce7f3, #e0e7ff)', borderColor: '#fbcfe8' }}>
 
           {/* LEFT — Avatar + Name */}
@@ -710,19 +758,7 @@ const GameRoadmap = ({ user }) => {
               ⏰ <span className="hidden md:inline">Lịch Ngày</span>
             </button>
 
-            {/* DEADLINE */}
-            <button onClick={() => setIsDeadlineModalOpen(true)}
-              className="relative flex items-center gap-1.5 text-[11px] font-black uppercase px-2.5 md:px-4 py-2 rounded-xl transition-all shadow-sm hover:scale-105 hover:shadow-md cursor-pointer"
-              style={{ background: urgentEvents.length > 0 ? '#fee2e2' : '#fef3c7', color: urgentEvents.length > 0 ? '#dc2626' : '#d97706', border: `1px solid ${urgentEvents.length > 0 ? '#fecaca' : '#fde68a'}` }}>
-              ⏰ <span className="hidden md:inline">Hạn Chót</span>
-              {urgentEvents.length > 0 && (
-                <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white text-[10px] font-black rounded-full flex items-center justify-center animate-bounce shadow-md">
-                  {urgentEvents.length}
-                </span>
-              )}
-            </button>
-
-            {/* THÔNG BÁO (Z-INDEX 999) */}
+            {/* THÔNG BÁO */}
             <div className="relative">
               <button onClick={markNotifsRead} className="relative flex items-center justify-center w-8 md:w-9 h-8 md:h-9 rounded-xl bg-white border border-pink-200 text-pink-500 shadow-sm hover:scale-105 transition-all cursor-pointer">
                 🔔
@@ -730,7 +766,7 @@ const GameRoadmap = ({ user }) => {
               </button>
               
               {isNotifOpen && (
-                <div className="absolute top-12 right-0 w-72 md:w-80 bg-white border-2 border-pink-100 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] z-[999] overflow-hidden flex flex-col">
+                <div className="absolute top-12 right-0 w-72 md:w-80 bg-white border-2 border-pink-100 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] z-[60] overflow-hidden flex flex-col">
                   <div className="bg-pink-50 px-4 py-2.5 text-[12px] font-black text-pink-600 border-b border-pink-100 flex justify-between items-center">
                     <span>Thông báo của bạn</span>
                     {unreadNotifs > 0 && <span className="bg-pink-200 text-pink-700 px-2 py-0.5 rounded-full text-[9px]">{unreadNotifs} Mới</span>}
@@ -771,7 +807,7 @@ const GameRoadmap = ({ user }) => {
         {/* ═══ BODY ══════════════════════════════════════════════ */}
         <div className="flex flex-1 overflow-hidden gap-3 p-3 bg-slate-50 z-10">
 
-          {/* ── SIDEBAR ─────────────────────────────────────────── */}
+          {/* ── SIDEBAR (ĐÃ LÀM MỚI THEO YÊU CẦU) ────────────────── */}
           <div className={`w-full md:w-[280px] shrink-0 flex flex-col gap-3 ${showMobileMap ? 'hidden md:flex' : 'flex'}`}>
 
             {/* Profile Card */}
@@ -791,63 +827,59 @@ const GameRoadmap = ({ user }) => {
               </div>
             </div>
 
-            {/* Stats Cards */}
+            {/* 🔥 SỰ KIỆN QUAN TRỌNG (THAY THẾ BẢNG THỐNG KÊ CŨ) */}
             <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar pr-1">
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { label: 'Tổng số',      val: stats.total,    color: '#6366f1', bg: '#e0e7ff',   icon: '📋' },
-                  { label: 'Hoàn thành', val: stats.done,    color: '#10b981', bg: '#d1fae5',  icon: '✅' },
-                  { label: 'Đang làm',  val: stats.inProg,   color: '#3b82f6', bg: '#dbeafe',  icon: '⏳' },
-                  { label: 'Sắp tới',   val: stats.upcoming, color: '#f59e0b', bg: '#fef3c7',  icon: '📅' },
-                ].map(s => (
-                  <div key={s.label} className="p-3 rounded-2xl text-center bg-white shadow-sm"
-                    style={{ border: `1px solid ${s.bg}` }}>
-                    <div className="text-xl mb-1">{s.icon}</div>
-                    <div className="font-black text-2xl" style={{ color: s.color }}>{s.val}</div>
-                    <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">{s.label}</div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Category Breakdown */}
-              <div className="rounded-2xl p-4 bg-white shadow-sm border border-slate-100">
-                <div className="text-[11px] font-black text-pink-400 uppercase tracking-widest mb-3 flex items-center gap-1"><span>📑</span> Phân loại</div>
-                <div className="space-y-2">
-                  {stats.catBreakdown.filter(c => c.count > 0).map(cat => (
-                    <div key={cat.id} className="flex items-center gap-2.5">
-                      <div className="text-sm shrink-0">{cat.icon}</div>
-                      <div className="text-[12px] font-bold text-slate-600 flex-1 truncate">{cat.label}</div>
-                      <div className="text-[12px] font-black bg-slate-50 px-2 py-0.5 rounded-md" style={{ color: cat.color }}>{cat.count}</div>
-                    </div>
-                  ))}
-                  {stats.catBreakdown.every(c => c.count === 0) && (
-                    <div className="text-[12px] text-slate-400 italic font-medium">Chưa có dữ liệu phân loại.</div>
-                  )}
+              
+              {/* Sự Kiện Hôm Nay */}
+              <div className="rounded-2xl p-4 bg-gradient-to-br from-pink-50 to-white shadow-sm border border-pink-100">
+                <div className="text-[11px] font-black text-pink-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                  <span className="text-sm">🎈</span> Sự Kiện Hôm Nay
                 </div>
-              </div>
-
-              {/* Upcoming this week */}
-              <div className="rounded-2xl p-4 bg-white shadow-sm border border-slate-100">
-                <div className="text-[11px] font-black text-indigo-400 uppercase tracking-widest mb-3 flex items-center gap-1"><span>📆</span> Tuần này</div>
-                {(() => {
-                  const weekEnd = new Date(now.getTime() + 7 * 86400000);
-                  const thisWeek = events.filter(e => e.end >= now && e.start <= weekEnd).sort((a, b) => a.end - b.end).slice(0, 3);
-                  if (thisWeek.length === 0) return <div className="text-[12px] text-slate-400 italic font-medium">Chưa có lịch trình trong tuần.</div>;
-                  return thisWeek.map(ev => {
-                    const cat = getCat(ev.category);
-                    return (
-                      <div key={ev.id} onClick={() => setSelectedEventDetail(ev)}
-                        className="flex items-center gap-3 py-2 cursor-pointer group hover:bg-slate-50 rounded-xl px-2 -mx-2 transition-colors">
-                        <div className="w-1.5 h-8 rounded-full shrink-0" style={{ background: cat.color }}></div>
+                {todaySpecials.length === 0 ? (
+                  <div className="text-[12px] text-slate-400 italic font-medium py-4 text-center border border-dashed border-pink-200 rounded-xl">
+                    Không có kỷ niệm nào hôm nay.
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {todaySpecials.map(ev => (
+                      <div key={ev.id} className="flex items-center gap-3 p-2.5 bg-white rounded-xl border border-pink-100 shadow-sm">
+                        <div className="text-xl shrink-0">{ev.type === 'birthday' ? '🎂' : ev.type === 'anniversary' ? '💍' : '🎉'}</div>
                         <div className="flex-1 min-w-0">
-                          <div className="text-[12px] font-black text-slate-700 truncate group-hover:text-indigo-600 transition-colors">{ev.title}</div>
-                          <div className="text-[10px] font-bold mt-0.5" style={{ color: cat.color }}>{ev.dateStr}</div>
+                          <div className="text-[13px] font-black text-pink-600 truncate">{ev.title}</div>
+                          <div className="text-[10px] font-bold text-slate-400 mt-0.5">Chúc mừng ngày đặc biệt!</div>
                         </div>
                       </div>
-                    );
-                  });
-                })()}
+                    ))}
+                  </div>
+                )}
               </div>
+
+              {/* Sự Kiện Sắp Tới */}
+              <div className="rounded-2xl p-4 bg-gradient-to-br from-indigo-50 to-white shadow-sm border border-indigo-100">
+                <div className="text-[11px] font-black text-indigo-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
+                  <span className="text-sm">⏳</span> Sự Kiện Sắp Tới
+                </div>
+                {!nextSpecial ? (
+                  <div className="text-[12px] text-slate-400 italic font-medium py-4 text-center border border-dashed border-indigo-200 rounded-xl">
+                    Chưa có lịch sự kiện nào được tạo.
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-3 p-3 bg-white rounded-xl border border-indigo-100 shadow-sm">
+                    <div className="text-2xl shrink-0">{nextSpecial.type === 'birthday' ? '🎂' : nextSpecial.type === 'anniversary' ? '💍' : '🎉'}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-black text-indigo-700 truncate">{nextSpecial.title}</div>
+                      <div className="text-[11px] font-bold text-slate-500 mt-1 flex items-center gap-1.5">
+                        <span className="bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-md">{nextSpecial.nextDate.toLocaleDateString('vi-VN')}</span>
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-center bg-indigo-500 text-white rounded-xl p-2 min-w-[50px] shadow-md">
+                      <div className="text-lg font-black leading-none">{nextSpecial.daysLeft}</div>
+                      <div className="text-[8px] uppercase font-bold mt-1">Ngày</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
             </div>
           </div>
 
@@ -1000,23 +1032,25 @@ const GameRoadmap = ({ user }) => {
       </div>
 
       {/* ════════════════════════════════════════════════════════
-          SETTINGS MODAL
+          SETTINGS MODAL (Z-INDEX 100)
       ════════════════════════════════════════════════════════ */}
       {isSettingsOpen && (
-        <div className="fixed inset-0 flex items-center justify-center z-50 p-2 md:p-4" style={{ background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)' }}>
+        <div className="fixed inset-0 flex items-center justify-center z-[100] p-2 md:p-4" style={{ background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)' }}>
           <div className="w-full max-w-[860px] h-[92vh] md:h-[680px] rounded-[2rem] flex flex-col overflow-hidden relative bg-white border-[3px] border-pink-200 shadow-[0_20px_60px_rgba(236,72,153,0.15)]">
 
             {/* Modal Header */}
-            <div className="h-16 flex items-center justify-between px-6 shrink-0 bg-pink-50 border-b border-pink-100">
-              <div className="flex gap-2">
+            <div className="h-16 flex items-center justify-between px-4 md:px-6 shrink-0 bg-pink-50 border-b border-pink-100">
+              {/* SỬA LỖI OVERLAP: Thêm overflow-x-auto cho list tab */}
+              <div className="flex gap-2 overflow-x-auto custom-scrollbar whitespace-nowrap pr-4">
                 {[
                   { id: 'profile', label: 'Tài Khoản',     icon: '⚙️' },
                   { id: 'events',  label: 'Quản Lý Lịch',  icon: '📅' },
                   { id: 'daily',   label: 'Lịch Ngày',     icon: '⏰' },
-                  { id: 'friends', label: 'Bạn Bè',         icon: '👥' },
+                  { id: 'special', label: 'Sự Kiện',       icon: '🎈' }, // 🔥 TAB MỚI
+                  { id: 'friends', label: 'Bạn Bè',        icon: '👥' },
                 ].map(tab => (
                   <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                    className="px-5 py-2 rounded-xl text-[12px] font-black uppercase tracking-wide transition-all shadow-sm cursor-pointer"
+                    className="px-4 py-2 rounded-xl text-[11px] md:text-[12px] font-black uppercase tracking-wide transition-all shadow-sm cursor-pointer shrink-0"
                     style={{
                       background: activeTab === tab.id ? '#fbcfe8' : '#ffffff',
                       color: activeTab === tab.id ? '#be185d' : '#64748b',
@@ -1027,7 +1061,7 @@ const GameRoadmap = ({ user }) => {
                 ))}
               </div>
               <button onClick={() => setIsSettingsOpen(false)}
-                className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-black transition-all bg-white text-slate-400 hover:bg-pink-500 hover:text-white border-2 border-slate-200 hover:border-pink-500 shadow-sm cursor-pointer">✕</button>
+                className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-black transition-all bg-white text-slate-400 hover:bg-pink-500 hover:text-white border-2 border-slate-200 hover:border-pink-500 shadow-sm cursor-pointer shrink-0">✕</button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-5 md:p-8 custom-scrollbar bg-slate-50/50">
@@ -1048,7 +1082,6 @@ const GameRoadmap = ({ user }) => {
                     </div>
                   </div>
 
-                  {/* Nút Xem Trang Công Khai */}
                   <div className="flex justify-end">
                     <button onClick={() => handleViewFriendFeed(user.uid)} className="px-5 py-2.5 bg-indigo-50 border border-indigo-200 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-wider hover:bg-indigo-100 hover:scale-105 transition-all shadow-sm cursor-pointer">
                       👁️ Xem trang công khai của tôi
@@ -1100,10 +1133,9 @@ const GameRoadmap = ({ user }) => {
                 </div>
               )}
 
-              {/* ── TAB: QUẢN LÝ LỊCH ── */}
+              {/* ── TAB: QUẢN LÝ LỊCH SỰ KIỆN ── */}
               {activeTab === 'events' && (
                 <div className="space-y-6">
-                  {/* Events List */}
                   <div className="rounded-3xl p-4 space-y-2 max-h-[220px] overflow-y-auto custom-scrollbar bg-white border-2 border-slate-100 shadow-sm">
                     <div className="text-[11px] font-black uppercase mb-3 text-indigo-500 flex items-center gap-2"><span className="text-lg">📚</span> Danh sách hiện có ({events.length})</div>
                     {events.length === 0 && <div className="text-[13px] italic text-slate-400 text-center py-4">Chưa có sự kiện nào được tạo!</div>}
@@ -1123,7 +1155,6 @@ const GameRoadmap = ({ user }) => {
                     })}
                   </div>
 
-                  {/* Add Event Form */}
                   <form onSubmit={handleAddEvent} className="space-y-4 bg-white p-5 rounded-3xl border-2 border-slate-100 shadow-sm">
                     <div className="text-[13px] font-black uppercase text-pink-500 flex items-center gap-2 mb-2"><span className="text-xl">✏️</span> Thêm sự kiện mới</div>
                     <input required type="text" placeholder="Tên sự kiện / môn học..."
@@ -1205,27 +1236,27 @@ const GameRoadmap = ({ user }) => {
                 </div>
               )}
 
-              {/* ── TAB: LỊCH TRÌNH TRONG NGÀY (CÀI ĐẶT) ── */}
+              {/* ── TAB: LỊCH TRÌNH TRONG NGÀY ── */}
               {activeTab === 'daily' && (
                 <div className="space-y-6">
                   <div className="flex flex-col sm:flex-row items-center justify-between bg-indigo-50 p-4 rounded-3xl border-2 border-indigo-100 shadow-sm gap-3">
                     <div className="text-[12px] font-black uppercase text-indigo-600">Đang xem lịch ngày:</div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 w-full sm:w-auto">
                       <button onClick={() => {
                         const d = new Date(dailyViewDate); d.setDate(d.getDate() - 1);
                         setDailyViewDate(formatDateToYMD(d));
-                      }} className="w-10 h-10 rounded-xl bg-white border border-indigo-200 text-indigo-600 font-black shadow-sm hover:bg-indigo-600 hover:text-white transition-colors cursor-pointer">←</button>
+                      }} className="w-10 h-10 rounded-xl bg-white border border-indigo-200 text-indigo-600 font-black shadow-sm hover:bg-indigo-600 hover:text-white transition-colors cursor-pointer shrink-0">←</button>
                       
                       <input type="date" value={dailyViewDate} onChange={e => setDailyViewDate(e.target.value)}
-                        className="px-4 py-2.5 rounded-xl border-2 border-indigo-200 outline-none font-black text-slate-700 bg-white" />
+                        className="flex-1 px-4 py-2.5 rounded-xl border-2 border-indigo-200 outline-none font-black text-slate-700 bg-white min-w-[140px]" />
                       
                       <button onClick={() => {
                         const d = new Date(dailyViewDate); d.setDate(d.getDate() + 1);
                         setDailyViewDate(formatDateToYMD(d));
-                      }} className="w-10 h-10 rounded-xl bg-white border border-indigo-200 text-indigo-600 font-black shadow-sm hover:bg-indigo-600 hover:text-white transition-colors cursor-pointer">→</button>
+                      }} className="w-10 h-10 rounded-xl bg-white border border-indigo-200 text-indigo-600 font-black shadow-sm hover:bg-indigo-600 hover:text-white transition-colors cursor-pointer shrink-0">→</button>
                     </div>
                     <button onClick={() => setDailyViewDate(todayYMD)} 
-                      className={`text-[11px] font-black px-4 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer ${dailyViewDate === todayYMD ? 'bg-indigo-600 text-white' : 'bg-white text-indigo-600 border border-indigo-200'}`}>Hôm nay</button>
+                      className={`w-full sm:w-auto text-[11px] font-black px-4 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer ${dailyViewDate === todayYMD ? 'bg-indigo-600 text-white' : 'bg-white text-indigo-600 border border-indigo-200'}`}>Hôm nay</button>
                   </div>
 
                   <form onSubmit={handleAddDailyTask} className="bg-white p-5 rounded-3xl border-2 border-slate-100 shadow-sm flex flex-col gap-4">
@@ -1262,7 +1293,7 @@ const GameRoadmap = ({ user }) => {
                           <option value="weekly">Mỗi tuần</option>
                           <option value="biweekly">Mỗi 2 tuần</option>
                           <option value="yearly">Mỗi năm</option>
-                          <option value="custom">Tùy chỉnh (Số ngày lặp)</option>
+                          <option value="custom">Tùy chỉnh</option>
                         </select>
                       </div>
                     </div>
@@ -1310,40 +1341,105 @@ const GameRoadmap = ({ user }) => {
                         {filteredSettingsDailySchedule.map(item => {
                           const isDoneOnThisDate = item.completedDates?.includes(dailyViewDate);
                           return (
-                            <div key={item.id} className={`flex items-center gap-3 md:gap-4 p-3.5 rounded-2xl border-2 transition-all ${isDoneOnThisDate ? 'bg-slate-50 border-slate-100 opacity-60' : 'bg-white border-indigo-100 hover:border-indigo-300 shadow-sm hover:-translate-y-0.5'}`}>
-                              
-                              <button onClick={() => handleToggleDailyTask(item.id, dailyViewDate)}
-                                className={`w-7 h-7 rounded-full flex items-center justify-center text-sm shrink-0 transition-colors shadow-inner cursor-pointer ${isDoneOnThisDate ? 'bg-emerald-500 text-white border border-emerald-600' : 'bg-slate-50 border-2 border-slate-300 text-transparent hover:border-emerald-400'}`}>
-                                ✔
-                              </button>
-                              
-                              <div className={`text-[12px] md:text-[14px] font-black font-mono px-2 md:px-3 py-1.5 rounded-xl border shrink-0 text-center ${isDoneOnThisDate ? 'bg-slate-100 text-slate-400 border-slate-200' : 'bg-indigo-50 text-indigo-600 border-indigo-200'}`}>
-                                {item.time} {item.endTime && <><br/><span className="text-[10px] text-slate-400">{item.endTime}</span></>}
-                              </div>
-                              
-                              <div className="flex-1 min-w-0">
-                                <div className={`text-[13px] md:text-[14px] font-bold truncate ${isDoneOnThisDate ? 'line-through text-slate-400' : 'text-slate-700'}`}>
-                                  {item.task}
+                            <div key={item.id} className={`flex flex-col md:flex-row md:items-center gap-3 md:gap-4 p-3.5 rounded-2xl border-2 transition-all ${isDoneOnThisDate ? 'bg-slate-50 border-slate-100 opacity-60' : 'bg-white border-indigo-100 hover:border-indigo-300 shadow-sm'}`}>
+                              <div className="flex items-center gap-3 flex-1 min-w-0">
+                                <button onClick={() => handleToggleDailyTask(item.id, dailyViewDate)}
+                                  className={`w-7 h-7 rounded-full flex items-center justify-center text-sm shrink-0 transition-colors shadow-inner cursor-pointer ${isDoneOnThisDate ? 'bg-emerald-500 text-white border border-emerald-600' : 'bg-slate-50 border-2 border-slate-300 text-transparent hover:border-emerald-400'}`}>
+                                  ✔
+                                </button>
+                                
+                                <div className={`text-[12px] md:text-[14px] font-black font-mono px-2 md:px-3 py-1.5 rounded-xl border shrink-0 text-center ${isDoneOnThisDate ? 'bg-slate-100 text-slate-400 border-slate-200' : 'bg-indigo-50 text-indigo-600 border-indigo-200'}`}>
+                                  {item.time} {item.endTime && <><br/><span className="text-[10px] text-slate-400">{item.endTime}</span></>}
                                 </div>
-                                <div className="flex gap-1.5 mt-1">
-                                  {item.repeat !== 'none' && (
-                                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded border border-slate-200 text-slate-400 bg-slate-50">
-                                      🔄 {item.repeat === 'custom' ? `${item.customDays} ngày` : item.repeat}
-                                    </span>
-                                  )}
-                                  {item.isShared && (
-                                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded border border-pink-200 text-pink-500 bg-pink-50">📢 Công khai</span>
-                                  )}
+                                
+                                <div className="flex-1 min-w-0">
+                                  <div className={`text-[13px] md:text-[14px] font-bold truncate ${isDoneOnThisDate ? 'line-through text-slate-400' : 'text-slate-700'}`}>
+                                    {item.task}
+                                  </div>
+                                  <div className="flex flex-wrap gap-1.5 mt-1">
+                                    {item.repeat !== 'none' && (
+                                      <span className="text-[9px] font-black px-1.5 py-0.5 rounded border border-slate-200 text-slate-400 bg-slate-50">
+                                        🔄 {item.repeat === 'custom' ? `${item.customDays} ngày` : item.repeat}
+                                      </span>
+                                    )}
+                                    {item.isShared && (
+                                      <span className="text-[9px] font-black px-1.5 py-0.5 rounded border border-pink-200 text-pink-500 bg-pink-50">📢 Công khai</span>
+                                    )}
+                                  </div>
                                 </div>
                               </div>
-                              
                               <button onClick={() => handleDeleteDailyTask(item.id)}
-                                className="w-8 h-8 md:w-9 md:h-9 flex items-center justify-center rounded-xl bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-colors border border-red-100 shrink-0 cursor-pointer">
+                                className="w-8 h-8 md:w-9 md:h-9 flex items-center justify-center rounded-xl bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-colors border border-red-100 shrink-0 cursor-pointer md:ml-auto">
                                 ✕
                               </button>
                             </div>
                           );
                         })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* ── 🔥 TAB MỚI: SỰ KIỆN QUAN TRỌNG (SINH NHẬT, KỶ NIỆM) ── */}
+              {activeTab === 'special' && (
+                <div className="space-y-6">
+                  <form onSubmit={handleAddSpecialEvent} className="bg-gradient-to-br from-pink-50 to-white p-5 rounded-3xl border border-pink-100 shadow-sm flex flex-col gap-4">
+                    <div className="text-[13px] font-black uppercase text-pink-500 flex items-center gap-2 mb-1"><span className="text-xl">🎈</span> Thêm sự kiện đặc biệt</div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                      <div className="col-span-1 md:col-span-1">
+                        <label className="text-[10px] font-black uppercase mb-1.5 block text-pink-500">Phân loại</label>
+                        <select className="w-full rounded-2xl px-3 py-3 text-[13px] font-bold outline-none bg-white border border-pink-200 text-slate-700 focus:border-pink-500 cursor-pointer shadow-inner"
+                          value={specialForm.type} onChange={e => setSpecialForm(p => ({ ...p, type: e.target.value }))}>
+                          <option value="birthday">🎂 Sinh nhật</option>
+                          <option value="anniversary">💍 Kỷ niệm</option>
+                          <option value="other">🎉 Sự kiện khác</option>
+                        </select>
+                      </div>
+                      <div className="col-span-1 md:col-span-1">
+                        <label className="text-[10px] font-black uppercase mb-1.5 block text-pink-500">Tên sự kiện / Tên người</label>
+                        <input required type="text" placeholder="Ví dụ: Sinh nhật Phúc..."
+                          className="w-full rounded-2xl px-4 py-2.5 text-sm font-semibold outline-none bg-white border border-pink-200 text-slate-700 focus:border-pink-500 shadow-inner"
+                          value={specialForm.title} onChange={e => setSpecialForm(p => ({ ...p, title: e.target.value }))} />
+                      </div>
+                      <div className="col-span-1 md:col-span-1">
+                        <label className="text-[10px] font-black uppercase mb-1.5 block text-pink-500">Ngày / Tháng / Năm</label>
+                        <input required type="date"
+                          className="w-full rounded-2xl px-3 py-2.5 text-sm font-bold outline-none bg-white border border-pink-200 text-slate-700 focus:border-pink-500 shadow-inner cursor-pointer"
+                          value={specialForm.date} onChange={e => setSpecialForm(p => ({ ...p, date: e.target.value }))} />
+                      </div>
+                    </div>
+                    <button type="submit"
+                      className="w-full py-3.5 rounded-2xl font-black uppercase text-sm tracking-wider transition-all hover:-translate-y-1 shadow-md bg-pink-500 text-white cursor-pointer mt-2">
+                      LƯU SỰ KIỆN
+                    </button>
+                  </form>
+
+                  <div className="rounded-3xl p-5 bg-white border border-slate-100 shadow-sm">
+                    <div className="text-[13px] font-black uppercase text-pink-500 mb-4 flex items-center gap-2">
+                      <span className="text-xl">📋</span> Danh sách sự kiện đặc biệt ({specialEvents.length})
+                    </div>
+                    {specialEvents.length === 0 ? (
+                      <div className="text-[13px] italic text-slate-400 py-6 text-center border-2 border-dashed border-slate-100 rounded-2xl">
+                        Bạn chưa thêm sự kiện đặc biệt nào.
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {specialEvents.map(ev => (
+                          <div key={ev.id} className="flex items-center gap-3 p-3 rounded-2xl border border-pink-100 bg-pink-50/30 hover:shadow-md transition-shadow">
+                            <div className="text-3xl shrink-0 bg-white w-12 h-12 rounded-xl flex items-center justify-center shadow-sm border border-pink-100">
+                              {ev.type === 'birthday' ? '🎂' : ev.type === 'anniversary' ? '💍' : '🎉'}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-[14px] font-black text-slate-800 truncate">{ev.title}</div>
+                              <div className="text-[11px] font-bold text-pink-500 mt-0.5">{new Date(ev.date).toLocaleDateString('vi-VN')}</div>
+                            </div>
+                            <button onClick={() => handleDeleteSpecialEvent(ev.id)}
+                              className="w-8 h-8 flex items-center justify-center rounded-xl bg-white text-red-500 hover:bg-red-500 hover:text-white transition-colors border border-red-100 shrink-0 shadow-sm cursor-pointer">
+                              ✕
+                            </button>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -1462,32 +1558,36 @@ const GameRoadmap = ({ user }) => {
                     {quickViewSchedule.map(item => {
                       const isDone = item.completedDates?.includes(quickViewDate);
                       return (
-                        <div key={item.id} className={`flex items-center gap-3 p-3.5 rounded-2xl border-2 transition-all ${isDone ? 'bg-slate-50 border-slate-100 opacity-70' : 'bg-white border-indigo-50 shadow-sm hover:border-indigo-200'}`}>
+                        <div key={item.id} className={`flex flex-col md:flex-row md:items-center gap-3 md:gap-4 p-3.5 rounded-2xl border-2 transition-all ${isDone ? 'bg-slate-50 border-slate-100 opacity-70' : 'bg-white border-indigo-50 shadow-sm hover:border-indigo-200'}`}>
                           
-                          <button onClick={() => handleToggleDailyTask(item.id, quickViewDate)}
-                            className={`w-7 h-7 rounded-full flex items-center justify-center text-sm shrink-0 transition-colors shadow-inner cursor-pointer ${isDone ? 'bg-emerald-500 text-white border border-emerald-600' : 'bg-slate-50 border-2 border-slate-300 text-transparent hover:border-emerald-400'}`}>
-                            ✔
-                          </button>
-                          
-                          <div className={`text-[14px] font-black font-mono px-2.5 py-1 rounded-xl border shrink-0 text-center ${isDone ? 'bg-slate-100 text-slate-400 border-slate-200' : 'bg-indigo-50 text-indigo-600 border-indigo-200'}`}>
-                            {item.time} {item.endTime && <><br/><span className="text-[9px] opacity-70">{item.endTime}</span></>}
-                          </div>
-                          
-                          <div className="flex-1 min-w-0 flex flex-col md:flex-row md:items-center justify-between gap-2">
-                            <div className={`text-[14px] font-bold truncate ${isDone ? 'line-through text-slate-400' : 'text-slate-700'}`}>
-                              {item.task}
-                              {item.repeat !== 'none' && (
-                                <span className="inline-block ml-2 text-[9px] font-black px-1.5 py-0.5 rounded border border-slate-200 text-slate-400 bg-slate-50 align-middle">
-                                  🔄
-                                </span>
-                              )}
+                          <div className="flex items-center gap-3 flex-1 min-w-0">
+                            <button onClick={() => handleToggleDailyTask(item.id, quickViewDate)}
+                              className={`w-7 h-7 rounded-full flex items-center justify-center text-sm shrink-0 transition-colors shadow-inner cursor-pointer ${isDone ? 'bg-emerald-500 text-white border border-emerald-600' : 'bg-slate-50 border-2 border-slate-300 text-transparent hover:border-emerald-400'}`}>
+                              ✔
+                            </button>
+                            
+                            <div className={`text-[12px] md:text-[14px] font-black font-mono px-2 py-1 rounded-xl border shrink-0 text-center ${isDone ? 'bg-slate-100 text-slate-400 border-slate-200' : 'bg-indigo-50 text-indigo-600 border-indigo-200'}`}>
+                              {item.time} {item.endTime && <><br/><span className="text-[9px] opacity-70">{item.endTime}</span></>}
                             </div>
                             
-                            <button onClick={() => handleToggleShareDailyTask(item.id)}
-                              className={`shrink-0 text-[10px] font-black px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${item.isShared ? 'bg-pink-100 text-pink-600 border-pink-200 hover:bg-pink-200' : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'}`}>
-                              {item.isShared ? '📢 Công khai' : '🔒 Riêng tư'}
-                            </button>
+                            <div className="flex-1 min-w-0">
+                              <div className={`text-[13px] md:text-[14px] font-bold truncate ${isDone ? 'line-through text-slate-400' : 'text-slate-700'}`}>
+                                {item.task}
+                              </div>
+                              <div className="flex flex-wrap gap-1.5 mt-1">
+                                {item.repeat !== 'none' && (
+                                  <span className="text-[9px] font-black px-1.5 py-0.5 rounded border border-slate-200 text-slate-400 bg-slate-50">
+                                    🔄 {item.repeat === 'custom' ? `${item.customDays} ngày` : item.repeat}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           </div>
+                          
+                          <button onClick={() => handleToggleShareDailyTask(item.id)}
+                            className={`shrink-0 text-[10px] font-black px-3 py-1.5 rounded-xl border transition-all cursor-pointer w-fit md:ml-auto ${item.isShared ? 'bg-pink-100 text-pink-600 border-pink-200 hover:bg-pink-200' : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'}`}>
+                            {item.isShared ? '📢 Công khai' : '🔒 Riêng tư'}
+                          </button>
 
                         </div>
                       );
