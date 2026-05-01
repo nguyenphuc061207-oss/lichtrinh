@@ -65,8 +65,8 @@ const GameRoadmap = ({ user }) => {
   const generateID = () => Math.floor(10000000 + Math.random() * 90000000).toString();
   
   const [profile, setProfile] = useState({
-    avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200", // Ảnh vuông mặc định
-    background: "https://images.unsplash.com/photo-1541562232579-512a21360020?q=80&w=800", // Ảnh nền 9:16 mặc định
+    avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200", 
+    background: "https://images.unsplash.com/photo-1541562232579-512a21360020?q=80&w=800", 
     title: "TỔNG QUAN PHIÊN BẢN", 
     subtitle: "v7.3",
     displayName: "Nhà Khai Phá",
@@ -87,18 +87,25 @@ const GameRoadmap = ({ user }) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         let loadedProfile = data.profile || profile;
+        let needsSave = false;
         
+        // Fix đồng bộ: Nếu tài khoản cũ chưa có ID, tạo mới và CHỐT LƯU lên máy chủ luôn
         if (!loadedProfile.shortId) {
           loadedProfile.shortId = generateID();
           loadedProfile.displayName = loadedProfile.displayName || "Nhà Khai Phá";
+          needsSave = true;
         }
         
-        // Hỗ trợ dữ liệu cũ: Nếu tài khoản cũ chưa có background, lấy tạm avatar cũ làm nền
         if (!loadedProfile.background) {
           loadedProfile.background = loadedProfile.avatar;
+          needsSave = true;
         }
 
         setProfile(loadedProfile);
+
+        if (needsSave) {
+          setDoc(doc(db, "users", user.uid), { profile: loadedProfile }, { merge: true });
+        }
 
         if (data.events) {
           const cloudEvents = data.events.map(ev => ({
@@ -133,7 +140,7 @@ const GameRoadmap = ({ user }) => {
         const fDoc = await getDoc(doc(db, "users", fUid));
         if (fDoc.exists()) {
           const fProfile = fDoc.data().profile;
-          if(!fProfile.background) fProfile.background = fProfile.avatar; // Fix dữ liệu cũ bạn bè
+          if(!fProfile.background) fProfile.background = fProfile.avatar; 
           dataArr.push({ uid: fUid, ...fProfile });
         }
       }
@@ -180,7 +187,6 @@ const GameRoadmap = ({ user }) => {
     reader.readAsDataURL(blob);
     setCropTarget(target);
     
-    // TÁCH TỈ LỆ ẢNH THEO TARGET
     if (target === 'avatar') {
       setCropAspectRatio(1 / 1); 
       setCrop({ unit: '%', width: 50, aspect: 1/1 });
@@ -227,7 +233,6 @@ const GameRoadmap = ({ user }) => {
         if (items[i].type.indexOf('image') !== -1) {
           e.preventDefault(); 
           const blob = items[i].getAsFile();
-          // Mặc định tab profile khi bấm Ctrl+V sẽ dán vào ảnh Nền (Background)
           const currentTarget = activeTab === 'profile' ? 'background' : 'event';
           processImageBlob(blob, currentTarget);
           break;
@@ -257,7 +262,6 @@ const GameRoadmap = ({ user }) => {
 
     const croppedImageUrl = canvas.toDataURL('image/jpeg', 0.8);
 
-    // PHÂN LOẠI TARGET ĐỂ LƯU VÀO ĐÚNG STATE
     if (cropTarget === 'event') {
       setEventFormData({ ...eventFormData, croppedImage: croppedImageUrl });
     } else if (cropTarget === 'avatar') {
@@ -279,7 +283,7 @@ const GameRoadmap = ({ user }) => {
       ...profile, 
       displayName: profileFormData.displayName,
       avatar: profileFormData.avatar,
-      background: profileFormData.background, // Lưu thêm background
+      background: profileFormData.background, 
       title: profileFormData.title.toUpperCase(),
       subtitle: profileFormData.subtitle.toUpperCase()
     };
@@ -434,7 +438,6 @@ const GameRoadmap = ({ user }) => {
           
           <div className={`w-full h-full md:w-[320px] md:h-full shrink-0 bg-white rounded-lg border-2 border-[#bfdbfe] relative flex-col justify-between z-20 shadow-sm p-2 md:p-3 ${showMobileMap ? 'hidden md:flex' : 'flex'}`}>
             <div className="w-full h-full relative rounded-md border-[3px] border-[#60a5fa] overflow-hidden shadow-[0_0_15px_rgba(96,165,250,0.3)] bg-slate-900 flex flex-col justify-end">
-              {/* Hiển thị background thay vì avatar */}
               <img src={profile.background} alt="Background" className="absolute inset-0 w-full h-full object-cover object-center opacity-80 md:opacity-100" />
               
               <div className="relative z-10 p-3 bg-gradient-to-t from-black/80 to-transparent text-white">
@@ -558,14 +561,14 @@ const GameRoadmap = ({ user }) => {
               {/* TAB TÀI KHOẢN (GIAO DIỆN & TÊN) */}
               {activeTab === 'profile' && (
                 <div className="space-y-4 md:space-y-6">
-                  {/* BẢNG PREVIEW */}
+                  {/* BẢNG PREVIEW - Ép dùng profile.shortId trực tiếp để luôn luôn đúng ID */}
                   <div className="flex gap-4 mb-6 bg-slate-800 p-4 rounded-lg border border-slate-600 items-center relative overflow-hidden">
                     <img src={profileFormData.background} alt="bg" className="absolute inset-0 w-full h-full object-cover opacity-30" />
                     <div className="relative z-10 flex gap-4 items-center">
                       <img src={profileFormData.avatar} alt="avatar" className="w-16 h-16 rounded-full border-2 border-cyan-400 object-cover bg-white" />
                       <div>
                         <h3 className="text-white font-black text-lg">{profileFormData.displayName}</h3>
-                        <p className="text-cyan-400 text-xs font-bold font-mono bg-cyan-900/30 px-2 py-0.5 rounded inline-block mt-1">ID: {profileFormData.shortId}</p>
+                        <p className="text-cyan-400 text-xs font-bold font-mono bg-cyan-900/30 px-2 py-0.5 rounded inline-block mt-1">ID: {profile.shortId}</p>
                       </div>
                     </div>
                   </div>
@@ -602,7 +605,7 @@ const GameRoadmap = ({ user }) => {
                 </div>
               )}
 
-              {/* TAB QUẢN LÝ LỊCH */}
+              {/* TAB QUẢN LÝ LỊCH VÀ BẠN BÈ GIỮ NGUYÊN BÊN DƯỚI... */}
               {activeTab === 'events' && (
                 <div className="flex flex-col h-full">
                   <div className="mb-4 md:mb-6 border-b border-slate-600 pb-4 md:pb-6">
@@ -647,10 +650,8 @@ const GameRoadmap = ({ user }) => {
                 </div>
               )}
 
-              {/* TAB BẠN BÈ */}
               {activeTab === 'friends' && (
                 <div className="flex flex-col h-full space-y-6">
-                  {/* Tìm kiếm */}
                   <form onSubmit={handleAddFriend} className="bg-slate-800 p-4 rounded-lg border border-slate-600 flex gap-3 items-end">
                      <div className="flex-1">
                        <label className="text-pink-400 text-[10px] md:text-xs font-bold block mb-1 uppercase">Nhập ID Bạn Bè (8 số):</label>
@@ -659,7 +660,6 @@ const GameRoadmap = ({ user }) => {
                      <button type="submit" className="bg-pink-500 hover:bg-pink-400 text-white font-black px-6 py-2.5 md:py-3 rounded shadow-[0_0_15px_rgba(236,72,153,0.4)] transition-colors h-[42px] md:h-[46px]">THÊM</button>
                   </form>
 
-                  {/* Danh sách bạn bè */}
                   <div className="flex-1">
                      <h3 className="text-white font-bold mb-3 uppercase text-[11px] md:text-sm border-l-4 border-pink-400 pl-2">Danh Sách Bạn Bè ({friendsData.length})</h3>
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
