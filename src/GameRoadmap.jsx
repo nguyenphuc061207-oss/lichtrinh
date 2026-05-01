@@ -59,14 +59,10 @@ const GameRoadmap = ({ user }) => {
   // 2. STATE DỮ LIỆU CỐT LÕI VÀ ĐỒNG BỘ FIRESTORE
   // ==========================================
   
-  // Quản lý trạng thái hiển thị giao diện trên Mobile
   const [showMobileMap, setShowMobileMap] = useState(false);
-  
-  // Quản lý bảng chi tiết sự kiện và bảng Deadline
   const [selectedEventDetail, setSelectedEventDetail] = useState(null); 
   const [isDeadlineModalOpen, setIsDeadlineModalOpen] = useState(false);
 
-  // Khởi tạo state với dữ liệu mặc định ban đầu
   const [profile, setProfile] = useState({
     avatar: "https://images.unsplash.com/photo-1541562232579-512a21360020?q=80&w=800",
     title: "TỔNG QUAN PHIÊN BẢN", 
@@ -75,11 +71,9 @@ const GameRoadmap = ({ user }) => {
   
   const [events, setEvents] = useState([]);
 
-  // Lắng nghe thay đổi dữ liệu từ Firestore dựa trên ID của người dùng đang đăng nhập
   useEffect(() => {
     if (!user) return;
     
-    // onSnapshot cung cấp khả năng cập nhật thời gian thực từ Firestore
     const unsub = onSnapshot(doc(db, "users", user.uid), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
@@ -122,7 +116,7 @@ const GameRoadmap = ({ user }) => {
   const [eventFormData, setEventFormData] = useState({ title: '', startDate: '', endDate: '', rewards: '' });
 
   // ==========================================
-  // 4. CẮT ẢNH VÀ XỬ LÝ HÌNH ẢNH
+  // 4. CẮT ẢNH VÀ XỬ LÝ DÁN ẢNH TỪ CLIPBOARD
   // ==========================================
   const [isCropModalOpen, setIsCropModalOpen] = useState(false);
   const [upImg, setUpImg] = useState(); 
@@ -132,24 +126,72 @@ const GameRoadmap = ({ user }) => {
   const imgRef = useRef(null);
   const [cropTarget, setCropTarget] = useState(''); 
 
+  // Hàm dùng chung để xử lý file ảnh dạng Blob (từ Input File hoặc Clipboard)
+  const processImageBlob = (blob, target) => {
+    const reader = new FileReader();
+    reader.addEventListener('load', () => setUpImg(reader.result));
+    reader.readAsDataURL(blob);
+    setCropTarget(target);
+    
+    if (target === 'profile') {
+      setCropAspectRatio(9 / 16); 
+      setCrop({ unit: '%', width: 50, aspect: 9/16 });
+    } else {
+      setCropAspectRatio(21 / 9); 
+      setCrop({ unit: '%', width: 80, aspect: 21/9 });
+    }
+    setIsCropModalOpen(true);
+  };
+
   const onSelectFile = (e, target) => {
     if (e.target.files && e.target.files.length > 0) {
-      const reader = new FileReader();
-      reader.addEventListener('load', () => setUpImg(reader.result));
-      reader.readAsDataURL(e.target.files[0]);
-      setCropTarget(target);
-      
-      if (target === 'profile') {
-        setCropAspectRatio(9 / 16); 
-        setCrop({ unit: '%', width: 50, aspect: 9/16 });
-      } else {
-        setCropAspectRatio(21 / 9); 
-        setCrop({ unit: '%', width: 80, aspect: 21/9 });
-      }
-      setIsCropModalOpen(true);
+      processImageBlob(e.target.files[0], target);
       e.target.value = ''; 
     }
   };
+
+  // Tính năng 1: Nút bấm Dán ảnh
+  const handlePasteButtonClick = async (target) => {
+    try {
+      const clipboardItems = await navigator.clipboard.read();
+      for (const clipboardItem of clipboardItems) {
+        const imageTypes = clipboardItem.types.filter(type => type.startsWith('image/'));
+        if (imageTypes.length > 0) {
+          const blob = await clipboardItem.getType(imageTypes[0]);
+          processImageBlob(blob, target);
+          return;
+        }
+      }
+      alert('Không tìm thấy ảnh nào trong bộ nhớ tạm (Clipboard)! Vui lòng Copy một bức ảnh trước.');
+    } catch (err) {
+      alert('Trình duyệt chặn quyền truy cập Clipboard. Bạn hãy nhấp chuột ra ngoài và bấm Ctrl+V để dán nhé!');
+    }
+  };
+
+  // Tính năng 2: Bắt sự kiện phím tắt Ctrl+V toàn cục
+  useEffect(() => {
+    const handleGlobalPaste = (e) => {
+      // Chỉ nhận lệnh Ctrl+V nếu bảng Cài Đặt đang mở và chưa bung bảng Cắt ảnh
+      if (!isSettingsOpen || isCropModalOpen) return;
+
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+          e.preventDefault(); // Ngăn trình duyệt dán file dạng text (nếu có)
+          const blob = items[i].getAsFile();
+          // Tự động nhận diện tab hiện tại để gán ảnh vào đúng chỗ
+          const currentTarget = activeTab === 'profile' ? 'profile' : 'event';
+          processImageBlob(blob, currentTarget);
+          break;
+        }
+      }
+    };
+
+    window.addEventListener('paste', handleGlobalPaste);
+    return () => window.removeEventListener('paste', handleGlobalPaste);
+  }, [isSettingsOpen, isCropModalOpen, activeTab]);
 
   const handleCropComplete = async () => {
     if (!completedCrop || !imgRef.current) return;
@@ -290,17 +332,12 @@ const GameRoadmap = ({ user }) => {
         {/* NỘI DUNG CHÍNH (CỘT AVATAR VÀ DÒNG THỜI GIAN) */}
         <div className="flex flex-col md:flex-row flex-1 overflow-hidden bg-[#e0e7ff] p-2 gap-2 relative">
           
-          {/* CỘT TRÁI (AVATAR) - LÀM MÀN HÌNH CHỜ TRÊN MOBILE */}
+          {/* CỘT TRÁI (AVATAR) */}
           <div className={`w-full h-full md:w-[320px] md:h-full shrink-0 bg-white rounded-lg border-2 border-[#bfdbfe] relative flex-col justify-between z-20 shadow-sm p-2 md:p-3 ${showMobileMap ? 'hidden md:flex' : 'flex'}`}>
             <div className="w-full h-full relative rounded-md border-[3px] border-[#60a5fa] overflow-hidden shadow-[0_0_15px_rgba(96,165,250,0.3)] bg-slate-900">
               <img src={profile.avatar} alt="Avatar" className="w-full h-full object-cover object-center opacity-80 md:opacity-100" />
-              
-              {/* NÚT BẤM VÀ LỚP PHỦ CHỈ HIỆN TRÊN MOBILE */}
               <div className="absolute inset-0 flex md:hidden flex-col items-center justify-center p-4 bg-gradient-to-t from-black/80 via-black/30 to-transparent">
-                 <button
-                    onClick={() => setShowMobileMap(true)}
-                    className="bg-cyan-500 hover:bg-cyan-400 text-[#0f172a] font-black px-8 py-4 rounded-full border-2 border-white shadow-[0_0_30px_rgba(6,182,212,0.8)] animate-pulse text-lg tracking-wider mt-32"
-                 >
+                 <button onClick={() => setShowMobileMap(true)} className="bg-cyan-500 hover:bg-cyan-400 text-[#0f172a] font-black px-8 py-4 rounded-full border-2 border-white shadow-[0_0_30px_rgba(6,182,212,0.8)] animate-pulse text-lg tracking-wider mt-32">
                     XEM LỊCH TRÌNH
                  </button>
               </div>
@@ -310,17 +347,12 @@ const GameRoadmap = ({ user }) => {
           {/* CỘT PHẢI (ROADMAP CUỘN NGANG) */}
           <div className={`flex-1 flex-col overflow-x-auto relative custom-scrollbar bg-white rounded-lg border-2 border-[#bfdbfe] shadow-inner ${showMobileMap ? 'flex' : 'hidden md:flex'}`} ref={scrollContainerRef}>
             
-            {/* NÚT QUAY LẠI ẢNH NỀN (CHỈ TRÊN MOBILE) */}
             <div className="md:hidden sticky left-0 top-0 z-50 w-full bg-white border-b-2 border-slate-200 p-2 shadow-sm flex justify-center">
-               <button
-                 onClick={() => setShowMobileMap(false)}
-                 className="bg-slate-700 text-white px-6 py-2 rounded-full font-bold text-xs shadow-md hover:bg-slate-600 uppercase tracking-widest flex items-center gap-2"
-               >
+               <button onClick={() => setShowMobileMap(false)} className="bg-slate-700 text-white px-6 py-2 rounded-full font-bold text-xs shadow-md hover:bg-slate-600 uppercase tracking-widest flex items-center gap-2">
                  <span>⬅</span> QUAY LẠI HÌNH NỀN
                </button>
             </div>
 
-            {/* ĐÂY LÀ CHỖ TÍNH CHIỀU RỘNG TỰ ĐỘNG: Mỗi ngày = 100px */}
             <div className="flex flex-col h-full relative" style={{ minWidth: `${totalDays * 100}px` }}>
               
               <div className="sticky top-0 z-40 bg-white shadow-sm border-b-2 border-[#e2e8f0]">
@@ -340,7 +372,6 @@ const GameRoadmap = ({ user }) => {
 
                 <div className="h-6 md:h-8 flex relative bg-white">
                   {daysArray.map((date, idx) => {
-                    // Hiển thị mốc ngày mỗi 2 ngày để thanh kéo dài không bị trống trải
                     if (idx % 2 === 0 || idx === totalDays) {
                       return (
                         <div key={idx} className="absolute top-0 flex flex-col items-center justify-start pt-0.5 md:pt-1" style={{ left: `${(idx / totalDays) * 100}%`, transform: 'translateX(-50%)' }}>
@@ -375,8 +406,13 @@ const GameRoadmap = ({ user }) => {
                       <div 
                         key={event.id} 
                         onClick={() => setSelectedEventDetail(event)} 
-                        className="absolute h-[64px] bg-white border-2 border-[#cbd5e1] rounded-lg shadow-sm flex items-center pr-1 md:pr-2 z-20 cursor-pointer hover:shadow-md hover:border-[#3b82f6] hover:scale-[1.01] transition-all" 
-                        style={{ left: `${leftPercent}%`, width: `${widthPercent}%`, top: `${topPosition}px` }}
+                        className="absolute h-[64px] bg-white border-2 border-[#cbd5e1] rounded-lg shadow-sm flex items-center pr-3 md:pr-4 z-20 cursor-pointer hover:shadow-md hover:border-[#3b82f6] hover:scale-[1.01] transition-all overflow-visible" 
+                        style={{ 
+                          left: `${leftPercent}%`, 
+                          width: `${widthPercent}%`, 
+                          minWidth: 'max-content', 
+                          top: `${topPosition}px` 
+                        }}
                       >
                         
                         <div className="absolute left-[-6px] md:left-[-8px] top-1/2 -translate-y-1/2 w-3 md:w-3.5 h-3 md:h-3.5 bg-white border-[2px] md:border-[3px] border-[#3b82f6] rounded-full z-10 shadow-sm"></div>
@@ -385,16 +421,15 @@ const GameRoadmap = ({ user }) => {
                           <img src={event.image} alt="event" className="w-full h-full object-cover" />
                         </div>
 
-                        <div className="flex-1 min-w-0 py-1 flex flex-col justify-center h-full">
-                          {/* Đã xóa lệnh truncate, thêm line-clamp-2 để chữ tự rớt xuống dòng */}
-                          <h4 className="font-bold text-[#1e3a8a] text-[11px] md:text-[13px] line-clamp-2 leading-tight break-words" title={event.title}>{event.title}</h4>
+                        <div className="flex-1 min-w-0 py-1 flex flex-col justify-center h-full mr-2">
+                          <h4 className="font-bold text-[#1e3a8a] text-[11px] md:text-[13px] whitespace-nowrap">{event.title}</h4>
                           <div className="text-[9px] md:text-[11px] text-slate-500 font-bold flex items-center gap-1 mt-1 bg-slate-100 w-fit px-1.5 md:px-2 py-0.5 rounded-full shrink-0">
                              <span className="text-[#d97706]">🕒</span> {event.dateStr}
                           </div>
                         </div>
 
                         {event.rewards && (
-                          <div className="shrink-0 flex items-center justify-end ml-1 md:ml-2 h-[80%] min-w-[60px] md:min-w-[80px] border-l border-slate-200 pl-1.5 md:pl-3 hidden sm:flex">
+                          <div className="shrink-0 flex items-center justify-end ml-1 md:ml-2 h-[80%] border-l border-slate-200 pl-2 md:pl-3 hidden sm:flex">
                              <div className="bg-[#f0f9ff] px-1.5 md:px-2 py-1 md:py-1.5 rounded-md border border-[#bae6fd] flex flex-col items-center shadow-inner">
                                 <span className="text-[10px] md:text-[14px]">💎</span>
                                 <span className="text-[8px] md:text-[10px] font-black text-[#0284c7] mt-0.5 whitespace-nowrap">{event.rewards}</span>
@@ -420,28 +455,18 @@ const GameRoadmap = ({ user }) => {
           className="fixed inset-0 bg-black/60 flex items-center justify-center z-[110] p-4 backdrop-blur-sm" 
           onClick={() => setIsDeadlineModalOpen(false)}
         >
-          <div 
-            className="bg-white border-4 border-red-400 rounded-2xl w-full max-w-[400px] max-h-[80vh] flex flex-col shadow-[0_0_30px_rgba(248,113,113,0.5)] animate-[fadeIn_0.2s_ease-out]" 
-            onClick={e => e.stopPropagation()}
-          >
+          <div className="bg-white border-4 border-red-400 rounded-2xl w-full max-w-[400px] max-h-[80vh] flex flex-col shadow-[0_0_30px_rgba(248,113,113,0.5)] animate-[fadeIn_0.2s_ease-out]" onClick={e => e.stopPropagation()}>
             <div className="bg-red-500 p-3 text-center rounded-t-lg relative">
               <h2 className="text-white font-black text-lg drop-shadow-md">🚨 BÁO ĐỘNG DEADLINE</h2>
-              <button 
-                onClick={() => setIsDeadlineModalOpen(false)} 
-                className="absolute top-1/2 -translate-y-1/2 right-3 w-7 h-7 bg-white hover:bg-slate-200 text-red-600 rounded-full font-black flex items-center justify-center transition-colors shadow-sm"
-              >
-                ✕
-              </button>
+              <button onClick={() => setIsDeadlineModalOpen(false)} className="absolute top-1/2 -translate-y-1/2 right-3 w-7 h-7 bg-white hover:bg-slate-200 text-red-600 rounded-full font-black flex items-center justify-center transition-colors shadow-sm">✕</button>
             </div>
             <div className="p-4 overflow-y-auto custom-scrollbar flex-1 space-y-3">
               {(() => {
-                // Lọc ra các sự kiện còn từ 0 đến 3 ngày
                 const urgentEvents = events.filter(ev => {
                   const daysLeft = Math.ceil((ev.end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
                   return daysLeft >= 0 && daysLeft <= 3;
                 });
 
-                // Nếu không có sự kiện nào sắp hết hạn
                 if (urgentEvents.length === 0) {
                   return (
                     <div className="text-center py-8">
@@ -451,17 +476,10 @@ const GameRoadmap = ({ user }) => {
                   );
                 }
 
-                // Nếu có sự kiện, sắp xếp theo thời gian tăng dần (cái nào gấp nhất lên đầu)
-                return urgentEvents
-                  .sort((a, b) => a.end - b.end)
-                  .map(ev => {
+                return urgentEvents.sort((a, b) => a.end - b.end).map(ev => {
                     const daysLeft = Math.ceil((ev.end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
                     return (
-                      <div 
-                        key={ev.id} 
-                        className="border-2 border-red-200 bg-red-50 rounded-xl p-3 flex gap-3 hover:border-red-500 hover:bg-red-100 cursor-pointer transition-colors" 
-                        onClick={() => { setIsDeadlineModalOpen(false); setSelectedEventDetail(ev); }}
-                      >
+                      <div key={ev.id} className="border-2 border-red-200 bg-red-50 rounded-xl p-3 flex gap-3 hover:border-red-500 hover:bg-red-100 cursor-pointer transition-colors" onClick={() => { setIsDeadlineModalOpen(false); setSelectedEventDetail(ev); }}>
                          <img src={ev.image} className="w-12 h-12 rounded-lg object-cover shadow-sm" alt="thumb"/>
                          <div className="flex-1">
                            <h4 className="font-bold text-slate-800 text-sm leading-tight mb-1">{ev.title}</h4>
@@ -499,10 +517,21 @@ const GameRoadmap = ({ user }) => {
                 <div className="space-y-4 md:space-y-6">
                   <div><label className="text-cyan-400 text-[10px] md:text-xs font-bold block mb-1 md:mb-2 uppercase">Tiêu đề lớn:</label><input type="text" className="w-full bg-[#0f172a] text-white border border-slate-600 rounded p-2 md:p-3 text-sm focus:outline-none focus:border-cyan-400" value={profileFormData.title} onChange={e => setProfileFormData({...profileFormData, title: e.target.value})} /></div>
                   <div><label className="text-cyan-400 text-[10px] md:text-xs font-bold block mb-1 md:mb-2 uppercase">Tiêu đề phụ:</label><input type="text" className="w-full bg-[#0f172a] text-white border border-slate-600 rounded p-2 md:p-3 text-sm focus:outline-none focus:border-cyan-400" value={profileFormData.subtitle} onChange={e => setProfileFormData({...profileFormData, subtitle: e.target.value})} /></div>
+                  
                   <div>
                     <label className="text-cyan-400 text-[10px] md:text-xs font-bold block mb-1 md:mb-2 uppercase">Ảnh Nền (Khung 9:16):</label>
-                    <input type="file" accept="image/*" onChange={(e) => onSelectFile(e, 'profile')} className="text-xs md:text-sm text-slate-300 w-full file:mr-2 file:py-1.5 file:px-3 file:rounded file:border-0 file:font-bold file:bg-[#3b82f6] file:text-white cursor-pointer" />
+                    <div className="flex gap-2 items-center">
+                      <input type="file" accept="image/*" onChange={(e) => onSelectFile(e, 'profile')} className="text-xs md:text-sm text-slate-300 w-full file:mr-2 file:py-1.5 file:px-3 file:rounded file:border-0 file:font-bold file:bg-[#3b82f6] file:text-white cursor-pointer" />
+                      <button type="button" onClick={() => handlePasteButtonClick('profile')} className="shrink-0 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded font-bold text-xs shadow-[0_0_10px_rgba(79,70,229,0.5)] border border-indigo-400 transition-colors flex items-center gap-1" title="Dán ảnh đã copy">
+                        📋 Dán
+                      </button>
+                    </div>
+                    {/* Hiển thị preview nháp nếu vừa cắt ảnh */}
+                    {profileFormData.avatar !== profile.avatar && (
+                      <div className="mt-2 text-[10px] text-green-400 italic">✔ Đã thay đổi ảnh nền nháp. Bấm Lưu Cấu Hình để áp dụng!</div>
+                    )}
                   </div>
+
                   <div className="pt-2 md:pt-4 border-t border-slate-600 mt-4 md:mt-6">
                     <button onClick={handleSaveProfile} className="bg-cyan-500 hover:bg-cyan-400 text-[#0f172a] font-black px-4 md:px-8 py-2.5 md:py-3 rounded uppercase w-full shadow-[0_0_15px_rgba(6,182,212,0.5)] text-sm md:text-base">Lưu Cấu Hình</button>
                   </div>
@@ -532,9 +561,23 @@ const GameRoadmap = ({ user }) => {
                       <div><label className="text-slate-400 text-[9px] md:text-[10px] font-bold block mb-1">ĐẾN NGÀY:</label><input required type="date" className="w-full bg-[#0f172a] text-white border border-slate-600 rounded p-1.5 md:p-2 text-xs md:text-sm style-date" value={eventFormData.endDate} onChange={e => setEventFormData({...eventFormData, endDate: e.target.value})} /></div>
                       <div className="col-span-1 md:col-span-2"><input type="text" placeholder="Mục tiêu (nếu có)" className="w-full bg-[#0f172a] text-white border border-slate-600 rounded p-2 md:p-3 text-xs md:text-sm" value={eventFormData.rewards} onChange={e => setEventFormData({...eventFormData, rewards: e.target.value})} /></div>
                     </div>
+                    
                     <div className="mb-4 md:mb-6">
                       <label className="text-green-400 text-[9px] md:text-[10px] font-bold block mb-1 md:mb-2 uppercase">Ảnh Thumbnail (Khung 21:9):</label>
-                      <input type="file" accept="image/*" onChange={(e) => onSelectFile(e, 'event')} className="text-xs md:text-sm text-slate-300 w-full file:mr-2 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-[#3b82f6] file:text-white cursor-pointer" />
+                      <div className="flex gap-2 items-center">
+                        <input type="file" accept="image/*" onChange={(e) => onSelectFile(e, 'event')} className="text-xs md:text-sm text-slate-300 w-full file:mr-2 file:py-1.5 file:px-3 file:rounded file:border-0 file:bg-[#3b82f6] file:text-white cursor-pointer" />
+                        <button type="button" onClick={() => handlePasteButtonClick('event')} className="shrink-0 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded font-bold text-xs shadow-[0_0_10px_rgba(79,70,229,0.5)] border border-indigo-400 transition-colors flex items-center gap-1" title="Dán ảnh đã copy">
+                          📋 Dán
+                        </button>
+                      </div>
+                      
+                      {/* Hiển thị preview nhỏ nếu vừa cắt ảnh xong */}
+                      {eventFormData.croppedImage && (
+                        <div className="mt-3 relative inline-block">
+                           <img src={eventFormData.croppedImage} alt="preview" className="h-12 rounded border-2 border-green-400 shadow-md" />
+                           <button type="button" onClick={() => setEventFormData({...eventFormData, croppedImage: null})} className="absolute -top-2 -right-2 bg-red-500 hover:bg-red-400 text-white w-5 h-5 rounded-full text-[10px] flex items-center justify-center font-bold shadow-sm transition-transform hover:scale-110">✕</button>
+                        </div>
+                      )}
                     </div>
                     <button type="submit" className="w-full bg-green-500 hover:bg-green-400 text-[#0f172a] font-black px-4 md:px-8 py-2.5 md:py-3 rounded uppercase transition-colors shadow-[0_0_15px_rgba(34,197,94,0.4)] text-sm md:text-base">Tạo Mới</button>
                   </form>
