@@ -104,7 +104,7 @@ const GameRoadmap = ({ user }) => {
     avatar:      "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200",
     background:  "https://images.unsplash.com/photo-1541562232579-512a21360020?q=80&w=800",
     title:       "TỔNG QUAN LỊCH TRÌNH",
-    subtitle:    "v8.1",
+    subtitle:    "v8.2",
     displayName: "Người dùng mới",
     shortId:     "........",
     bio:         "",
@@ -120,6 +120,7 @@ const GameRoadmap = ({ user }) => {
   const [searchFriendId,    setSearchFriendId]    = useState('');
   const [viewingFriendFeed, setViewingFriendFeed] = useState(null);
   const [commentInputs,     setCommentInputs]     = useState({});
+  const [replyingTo,        setReplyingTo]        = useState({}); // Lưu trạng thái đang Reply ai
   const [isLoading,         setIsLoading]         = useState(true);
 
   useEffect(() => {
@@ -482,8 +483,8 @@ const GameRoadmap = ({ user }) => {
     alert("✅ Kết bạn thành công!");
   };
 
-  // ── TƯƠNG TÁC: CẢM XÚC & BÌNH LUẬN ──
-  const handleInteract = async (targetUid, itemId, itemType, actionType, payload) => {
+  // ── TƯƠNG TÁC: CẢM XÚC, BÌNH LUẬN & TRẢ LỜI ──
+  const handleInteract = async (targetUid, itemId, itemType, actionType, payload, replyData = null) => {
     if(!user) return;
     try {
       const docRef = doc(db, "users", targetUid);
@@ -497,15 +498,15 @@ const GameRoadmap = ({ user }) => {
 
       const item = targetList[itemIndex];
       let notifs = d.notifications || [];
-      let notifMsg = "";
+      let notifMsgForOwner = "";
 
       if (actionType === 'reaction') {
         if (!item.reactions) item.reactions = {};
         if (item.reactions[user.uid] === payload) {
-          delete item.reactions[user.uid]; // Undo
+          delete item.reactions[user.uid];
         } else {
           item.reactions[user.uid] = payload;
-          notifMsg = `đã thả ${payload} vào lịch trình của bạn.`;
+          notifMsgForOwner = `đã thả ${payload} vào lịch trình của bạn.`;
         }
       } else if (actionType === 'comment') {
         if (!item.comments) item.comments = [];
@@ -515,31 +516,65 @@ const GameRoadmap = ({ user }) => {
           displayName: profile.displayName,
           avatar: profile.avatar,
           text: payload,
-          createdAt: new Date().toISOString()
+          createdAt: new Date().toISOString(),
+          replyToUid: replyData ? replyData.uid : null,
+          replyToName: replyData ? replyData.displayName : null
         });
-        notifMsg = `đã bình luận: "${payload}"`;
+
+        // Xóa form nhập và huỷ trạng thái reply
         setCommentInputs(p => ({ ...p, [itemId]: '' })); 
+        setReplyingTo(p => { const newP = {...p}; delete newP[itemId]; return newP; });
+        
+        // Chuẩn bị Text Thông báo cho Chủ Bài Viết
+        notifMsgForOwner = (replyData && replyData.uid !== targetUid) 
+          ? `đã bình luận trong bài viết của bạn: "${payload}"` 
+          : (replyData ? `đã trả lời bình luận của bạn: "${payload}"` : `đã bình luận: "${payload}"`);
       }
 
-      if (targetUid !== user.uid && notifMsg) {
+      // 1. Gửi thông báo cho CHỦ BÀI VIẾT (nếu người thao tác không phải chủ)
+      if (targetUid !== user.uid && notifMsgForOwner) {
         notifs.push({
-          id: Date.now().toString(),
+          id: Date.now().toString() + "_1",
           fromUid: user.uid,
           fromName: profile.displayName,
           fromAvatar: profile.avatar,
-          text: notifMsg,
+          text: notifMsgForOwner,
           read: false,
           createdAt: new Date().toISOString(),
-          itemId: itemId,       // Lưu ID để nhảy tới
-          itemType: itemType    // Phân loại Lịch ngày hay Sự kiện
+          itemId: itemId,       
+          itemType: itemType    
         });
       }
 
+      // Lưu lại dữ liệu cho Chủ bài viết
       await setDoc(docRef, { 
         [itemType === 'event' ? 'events' : 'dailySchedule']: targetList,
         notifications: notifs
       }, { merge: true });
 
+      // 2. Gửi thông báo chéo cho NGƯỜI ĐƯỢC REPLY (Nếu có reply và người đó KHÔNG PHẢI chủ bài viết, KHÔNG PHẢI chính mình)
+      if (actionType === 'comment' && replyData && replyData.uid !== user.uid && replyData.uid !== targetUid) {
+        const repliedUserRef = doc(db, "users", replyData.uid);
+        const repliedUserSnap = await getDoc(repliedUserRef);
+        if (repliedUserSnap.exists()) {
+            const ruData = repliedUserSnap.data();
+            const ruNotifs = ruData.notifications || [];
+            ruNotifs.push({
+                id: Date.now().toString() + "_2",
+                fromUid: user.uid,
+                fromName: profile.displayName,
+                fromAvatar: profile.avatar,
+                text: `đã trả lời bình luận của bạn: "${payload}"`,
+                read: false,
+                createdAt: new Date().toISOString(),
+                itemId: itemId,
+                itemType: itemType
+            });
+            await setDoc(repliedUserRef, { notifications: ruNotifs }, { merge: true });
+        }
+      }
+
+      // Update View Live (Dành cho trang Friend Feed)
       if (viewingFriendFeed && viewingFriendFeed.uid === targetUid) {
         setViewingFriendFeed(prev => {
           const newFeed = {...prev};
@@ -580,16 +615,13 @@ const GameRoadmap = ({ user }) => {
     setIsSettingsOpen(false);
   };
 
-  // 🔥 Xử lý click vào Thông báo
   const handleNotifClick = (notif) => {
-    // Đánh dấu đã đọc
     const updated = notifications.map(n => n.id === notif.id ? {...n, read: true} : n);
     setNotifications(updated);
     setDoc(doc(db, "users", user.uid), { notifications: updated }, { merge: true });
     
     setIsNotifOpen(false);
 
-    // Chuyển hướng
     if (notif.itemType === 'event') {
       const ev = events.find(e => e.id === notif.itemId);
       if (ev) setSelectedEventDetail(ev);
@@ -604,7 +636,6 @@ const GameRoadmap = ({ user }) => {
 
   const markNotifsRead = async () => {
     setIsNotifOpen(!isNotifOpen);
-    // Nếu đóng Notif menu -> Tự động xoá hết chấm đỏ cho gọn
     if (isNotifOpen && notifications.some(n => !n.read)) {
       const updated = notifications.map(n => ({...n, read: true}));
       setNotifications(updated);
@@ -632,7 +663,6 @@ const GameRoadmap = ({ user }) => {
   }, [events]);
 
   const urgentEvents = events.filter(ev => { const d = getDaysLeft(ev); return d >= 0 && d <= 3; });
-  // Lọc chuẩn xác số chưa đọc (tránh lỗi null/undefined data rác)
   const unreadNotifs = notifications.filter(n => n && n.read === false).length;
 
   // ── 9. RENDER ──────────────────────────────────────────────
@@ -652,7 +682,7 @@ const GameRoadmap = ({ user }) => {
       <div className="w-full max-w-[1500px] h-[96vh] md:h-[820px] rounded-3xl flex flex-col relative overflow-hidden"
         style={{ background: 'rgba(255, 255, 255, 0.95)', border: '2px solid #fbcfe8', boxShadow: '0 10px 40px rgba(236, 72, 153, 0.15)' }}>
 
-        {/* ═══ HEADER (Z-INDEX 100 ĐỂ NOTIF MENU NỔI LÊN) ══════ */}
+        {/* ═══ HEADER (Z-INDEX CAO) ═══════════════════════════ */}
         <div className="h-16 flex items-center justify-between px-4 border-b shrink-0 shadow-sm z-[100] relative"
           style={{ background: 'linear-gradient(90deg, #fce7f3, #e0e7ff)', borderColor: '#fbcfe8' }}>
 
@@ -673,7 +703,7 @@ const GameRoadmap = ({ user }) => {
           {/* RIGHT — Action Buttons */}
           <div className="flex items-center gap-1.5 md:gap-2">
             
-            {/* LỊCH NGÀY (Cập nhật giao diện Mobile) */}
+            {/* LỊCH NGÀY */}
             <button onClick={() => setIsDailyModalOpen(true)}
               className="flex items-center gap-1.5 text-[11px] font-black uppercase px-2.5 md:px-4 py-2 rounded-xl transition-all shadow-sm hover:scale-105 hover:shadow-md cursor-pointer"
               style={{ background: '#e0e7ff', color: '#4f46e5', border: '1px solid #c7d2fe' }}>
@@ -692,7 +722,7 @@ const GameRoadmap = ({ user }) => {
               )}
             </button>
 
-            {/* THÔNG BÁO (Z-INDEX CAO) */}
+            {/* THÔNG BÁO (Z-INDEX 999) */}
             <div className="relative">
               <button onClick={markNotifsRead} className="relative flex items-center justify-center w-8 md:w-9 h-8 md:h-9 rounded-xl bg-white border border-pink-200 text-pink-500 shadow-sm hover:scale-105 transition-all cursor-pointer">
                 🔔
@@ -747,7 +777,6 @@ const GameRoadmap = ({ user }) => {
             {/* Profile Card */}
             <div className="relative rounded-2xl overflow-hidden flex-none h-[200px] shadow-sm border-2 border-pink-100 bg-white">
               <img src={profile.background} alt="bg" className="absolute inset-0 w-full h-full object-cover" />
-              {/* Lớp mờ tinh chỉnh để nền rõ hơn */}
               <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(255,255,255,1) 0%, rgba(255,255,255,0.1) 60%, transparent 100%)' }}></div>
               <div className="absolute bottom-0 left-0 right-0 p-4">
                 <div className="text-indigo-900 font-black text-[17px] leading-tight drop-shadow-sm">{profile.title}</div>
@@ -1009,7 +1038,6 @@ const GameRoadmap = ({ user }) => {
                   {/* Preview */}
                   <div className="relative h-32 rounded-3xl overflow-hidden border-[3px] border-white shadow-md bg-white">
                     <img src={profileFormData.background} alt="bg" className="absolute inset-0 w-full h-full object-cover" />
-                    {/* Gradient nhẹ nhàng để ảnh rõ hơn */}
                     <div className="absolute inset-0 bg-gradient-to-r from-white/70 via-white/30 to-transparent"></div>
                     <div className="absolute inset-0 flex items-center gap-5 px-6">
                       <img src={profileFormData.avatar} alt="av" className="w-20 h-20 rounded-full object-cover border-4 border-white shadow-md bg-white" />
@@ -1020,7 +1048,7 @@ const GameRoadmap = ({ user }) => {
                     </div>
                   </div>
 
-                  {/* Nút Xem Trang Công Khai của chính mình */}
+                  {/* Nút Xem Trang Công Khai */}
                   <div className="flex justify-end">
                     <button onClick={() => handleViewFriendFeed(user.uid)} className="px-5 py-2.5 bg-indigo-50 border border-indigo-200 text-indigo-600 rounded-xl font-black text-[11px] uppercase tracking-wider hover:bg-indigo-100 hover:scale-105 transition-all shadow-sm cursor-pointer">
                       👁️ Xem trang công khai của tôi
@@ -1075,6 +1103,7 @@ const GameRoadmap = ({ user }) => {
               {/* ── TAB: QUẢN LÝ LỊCH ── */}
               {activeTab === 'events' && (
                 <div className="space-y-6">
+                  {/* Events List */}
                   <div className="rounded-3xl p-4 space-y-2 max-h-[220px] overflow-y-auto custom-scrollbar bg-white border-2 border-slate-100 shadow-sm">
                     <div className="text-[11px] font-black uppercase mb-3 text-indigo-500 flex items-center gap-2"><span className="text-lg">📚</span> Danh sách hiện có ({events.length})</div>
                     {events.length === 0 && <div className="text-[13px] italic text-slate-400 text-center py-4">Chưa có sự kiện nào được tạo!</div>}
@@ -1094,13 +1123,13 @@ const GameRoadmap = ({ user }) => {
                     })}
                   </div>
 
+                  {/* Add Event Form */}
                   <form onSubmit={handleAddEvent} className="space-y-4 bg-white p-5 rounded-3xl border-2 border-slate-100 shadow-sm">
                     <div className="text-[13px] font-black uppercase text-pink-500 flex items-center gap-2 mb-2"><span className="text-xl">✏️</span> Thêm sự kiện mới</div>
                     <input required type="text" placeholder="Tên sự kiện / môn học..."
                       className="w-full rounded-2xl px-4 py-3 text-sm font-semibold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-pink-400 focus:bg-white transition-all"
                       value={eventFormData.title} onChange={e => setEventFormData(p => ({ ...p, title: e.target.value }))} />
                     <div className="grid grid-cols-2 gap-4">
-                      {/* Đổi label thành Ngày */}
                       {[{ key: 'startDate', label: 'Ngày' }, { key: 'endDate', label: 'Đến ngày' }].map(f => (
                         <div key={f.key}>
                           <label className="text-[10px] font-black uppercase mb-1.5 block text-indigo-400">{f.label}</label>
@@ -1201,7 +1230,6 @@ const GameRoadmap = ({ user }) => {
 
                   <form onSubmit={handleAddDailyTask} className="bg-white p-5 rounded-3xl border-2 border-slate-100 shadow-sm flex flex-col gap-4">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end">
-                      {/* Đổi label thành Ngày */}
                       <div className="col-span-2 md:col-span-1">
                         <label className="text-[10px] font-black uppercase mb-1.5 block text-indigo-500">Ngày</label>
                         <input required type="date"
@@ -1680,7 +1708,7 @@ const GameRoadmap = ({ user }) => {
                             {isDone && <span className="text-emerald-500 text-lg font-black mr-2">✔</span>}
                           </div>
                           
-                          {/* REACTION BAR - Fix Lỗi: Chỉ hiện màu khi có lượt tương tác hoặc được bấm */}
+                          {/* REACTION BAR */}
                           <div className="mt-3 flex flex-wrap gap-2 items-center bg-slate-50 p-2 rounded-xl border border-slate-100">
                             {REACTIONS.map(emo => {
                               const count = Object.values(t.reactions || {}).filter(r => r === emo).length;
@@ -1696,26 +1724,39 @@ const GameRoadmap = ({ user }) => {
                             })}
                           </div>
 
-                          {/* COMMENTS */}
+                          {/* COMMENTS UI */}
                           {t.comments && t.comments.length > 0 && (
-                            <div className="mt-3 space-y-2 max-h-40 overflow-y-auto custom-scrollbar bg-slate-50 p-2 rounded-xl">
+                            <div className="mt-3 space-y-3 max-h-48 overflow-y-auto custom-scrollbar bg-slate-50 p-3 rounded-xl">
                               {t.comments.map(c => (
-                                <div key={c.id} className="flex gap-2 bg-white p-2 rounded-lg border border-slate-100 shadow-sm">
-                                  <img src={c.avatar} alt="av" className="w-6 h-6 rounded-full object-cover shrink-0" />
-                                  <div className="flex-1 min-w-0">
-                                    <div className="text-[10px] font-black text-indigo-900">{c.displayName} <span className="text-slate-400 font-normal ml-1">{new Date(c.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span></div>
-                                    <div className="text-[11px] text-slate-700 mt-0.5 break-words">{c.text}</div>
+                                <div key={c.id} className="flex gap-2">
+                                  <img src={c.avatar} alt="av" className="w-7 h-7 rounded-full object-cover shrink-0 border border-slate-200" />
+                                  <div className="flex-1 min-w-0 bg-white p-2.5 rounded-2xl rounded-tl-none border border-slate-100 shadow-sm">
+                                    <div className="text-[11px] font-black text-indigo-900">{c.displayName} <span className="text-slate-400 font-normal ml-1 text-[9px]">{new Date(c.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span></div>
+                                    <div className="text-[12px] text-slate-700 mt-1 break-words leading-relaxed">
+                                      {c.replyToName && <span className="font-bold text-indigo-500 mr-1.5">@{c.replyToName}</span>}
+                                      {c.text}
+                                    </div>
+                                    <button onClick={() => setReplyingTo(p => ({...p, [t.id]: { uid: c.uid, displayName: c.displayName }}))} 
+                                      className="text-[10px] text-slate-400 font-bold hover:text-indigo-600 mt-1.5 transition-colors cursor-pointer inline-block">Phản hồi</button>
                                   </div>
                                 </div>
                               ))}
                             </div>
                           )}
-                          <div className="mt-2 flex gap-2">
-                            <input type="text" placeholder="Bình luận..." value={commentInputs[t.id] || ''} onChange={e => setCommentInputs(p => ({...p, [t.id]: e.target.value}))}
-                              className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-[11px] font-medium outline-none focus:border-indigo-300" 
-                              onKeyDown={e => { if(e.key==='Enter' && commentInputs[t.id]?.trim()){ handleInteract(viewingFriendFeed.uid, t.id, 'daily', 'comment', commentInputs[t.id]); } }}/>
-                            <button onClick={() => { if(commentInputs[t.id]?.trim()){ handleInteract(viewingFriendFeed.uid, t.id, 'daily', 'comment', commentInputs[t.id]); } }}
-                              className="px-3 py-1.5 bg-indigo-500 text-white rounded-xl text-[10px] font-black hover:bg-indigo-600 transition-colors cursor-pointer">Gửi</button>
+                          <div className="mt-3 flex flex-col">
+                            {replyingTo[t.id] && (
+                              <div className="flex items-center justify-between bg-indigo-50 px-3 py-1.5 rounded-t-xl text-[10px] text-indigo-600 font-bold border border-b-0 border-indigo-100">
+                                <span>Đang trả lời @{replyingTo[t.id].displayName}</span>
+                                <button onClick={() => setReplyingTo(p => { const newP = {...p}; delete newP[t.id]; return newP; })} className="hover:text-red-500 cursor-pointer">✕</button>
+                              </div>
+                            )}
+                            <div className="flex gap-2">
+                              <input type="text" placeholder="Viết bình luận..." value={commentInputs[t.id] || ''} onChange={e => setCommentInputs(p => ({...p, [t.id]: e.target.value}))}
+                                className={`flex-1 bg-slate-50 border border-slate-200 px-3 py-2 text-[12px] font-medium outline-none focus:border-indigo-300 ${replyingTo[t.id] ? 'rounded-b-xl rounded-tr-xl' : 'rounded-xl'}`} 
+                                onKeyDown={e => { if(e.key==='Enter' && commentInputs[t.id]?.trim()){ handleInteract(viewingFriendFeed.uid, t.id, 'daily', 'comment', commentInputs[t.id], replyingTo[t.id]); } }}/>
+                              <button onClick={() => { if(commentInputs[t.id]?.trim()){ handleInteract(viewingFriendFeed.uid, t.id, 'daily', 'comment', commentInputs[t.id], replyingTo[t.id]); } }}
+                                className={`px-4 py-2 bg-indigo-500 text-white text-[11px] font-black hover:bg-indigo-600 transition-colors cursor-pointer shadow-sm ${replyingTo[t.id] ? 'rounded-b-xl rounded-tr-xl' : 'rounded-xl'}`}>Gửi</button>
+                            </div>
                           </div>
                         </div>
                       )
@@ -1754,7 +1795,7 @@ const GameRoadmap = ({ user }) => {
                               <p className="mt-3 text-[12px] text-amber-700 font-bold bg-amber-50 p-2.5 rounded-xl border border-amber-100 flex items-center gap-2 shadow-inner"><span className="text-lg">⭐</span> {ev.rewards}</p>
                             )}
 
-                            {/* REACTION BAR EVENT - Tương tự như trên */}
+                            {/* REACTION BAR EVENT */}
                             <div className="mt-4 flex flex-wrap gap-2 items-center bg-pink-50 p-2 rounded-xl border border-pink-100">
                               {REACTIONS.map(emo => {
                                 const count = Object.values(ev.reactions || {}).filter(r => r === emo).length;
@@ -1772,25 +1813,39 @@ const GameRoadmap = ({ user }) => {
 
                             {/* COMMENTS EVENT */}
                             {ev.comments && ev.comments.length > 0 && (
-                              <div className="mt-3 space-y-2 max-h-40 overflow-y-auto custom-scrollbar bg-slate-50 p-2 rounded-xl">
+                              <div className="mt-3 space-y-3 max-h-48 overflow-y-auto custom-scrollbar bg-slate-50 p-3 rounded-xl">
                                 {ev.comments.map(c => (
-                                  <div key={c.id} className="flex gap-2 bg-white p-2 rounded-lg border border-slate-100 shadow-sm">
-                                    <img src={c.avatar} alt="av" className="w-6 h-6 rounded-full object-cover shrink-0" />
-                                    <div className="flex-1 min-w-0">
-                                      <div className="text-[10px] font-black text-pink-900">{c.displayName} <span className="text-slate-400 font-normal ml-1">{new Date(c.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span></div>
-                                      <div className="text-[11px] text-slate-700 mt-0.5 break-words">{c.text}</div>
+                                  <div key={c.id} className="flex gap-2">
+                                    <img src={c.avatar} alt="av" className="w-7 h-7 rounded-full object-cover shrink-0 border border-slate-200" />
+                                    <div className="flex-1 min-w-0 bg-white p-2.5 rounded-2xl rounded-tl-none border border-slate-100 shadow-sm">
+                                      <div className="text-[11px] font-black text-pink-900">{c.displayName} <span className="text-slate-400 font-normal ml-1 text-[9px]">{new Date(c.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span></div>
+                                      <div className="text-[12px] text-slate-700 mt-1 break-words leading-relaxed">
+                                        {c.replyToName && <span className="font-bold text-pink-500 mr-1.5">@{c.replyToName}</span>}
+                                        {c.text}
+                                      </div>
+                                      <button onClick={() => setReplyingTo(p => ({...p, [ev.id]: { uid: c.uid, displayName: c.displayName }}))} 
+                                        className="text-[10px] text-slate-400 font-bold hover:text-pink-600 mt-1.5 transition-colors cursor-pointer inline-block">Phản hồi</button>
                                     </div>
                                   </div>
                                 ))}
                               </div>
                             )}
-                            <div className="mt-2 flex gap-2">
-                              <input type="text" placeholder="Bình luận..." value={commentInputs[ev.id] || ''} onChange={e => setCommentInputs(p => ({...p, [ev.id]: e.target.value}))}
-                                className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-[11px] font-medium outline-none focus:border-pink-300" 
-                                onKeyDown={e => { if(e.key==='Enter' && commentInputs[ev.id]?.trim()){ handleInteract(viewingFriendFeed.uid, ev.id, 'event', 'comment', commentInputs[ev.id]); } }}/>
-                              <button onClick={() => { if(commentInputs[ev.id]?.trim()){ handleInteract(viewingFriendFeed.uid, ev.id, 'event', 'comment', commentInputs[ev.id]); } }}
-                                className="px-3 py-1.5 bg-pink-500 text-white rounded-xl text-[10px] font-black hover:bg-pink-600 transition-colors cursor-pointer">Gửi</button>
+                            <div className="mt-3 flex flex-col">
+                              {replyingTo[ev.id] && (
+                                <div className="flex items-center justify-between bg-pink-50 px-3 py-1.5 rounded-t-xl text-[10px] text-pink-600 font-bold border border-b-0 border-pink-100">
+                                  <span>Đang trả lời @{replyingTo[ev.id].displayName}</span>
+                                  <button onClick={() => setReplyingTo(p => { const newP = {...p}; delete newP[ev.id]; return newP; })} className="hover:text-red-500 cursor-pointer">✕</button>
+                                </div>
+                              )}
+                              <div className="flex gap-2">
+                                <input type="text" placeholder="Viết bình luận..." value={commentInputs[ev.id] || ''} onChange={e => setCommentInputs(p => ({...p, [ev.id]: e.target.value}))}
+                                  className={`flex-1 bg-slate-50 border border-slate-200 px-3 py-2 text-[12px] font-medium outline-none focus:border-pink-300 ${replyingTo[ev.id] ? 'rounded-b-xl rounded-tr-xl' : 'rounded-xl'}`} 
+                                  onKeyDown={e => { if(e.key==='Enter' && commentInputs[ev.id]?.trim()){ handleInteract(viewingFriendFeed.uid, ev.id, 'event', 'comment', commentInputs[ev.id], replyingTo[ev.id]); } }}/>
+                                <button onClick={() => { if(commentInputs[ev.id]?.trim()){ handleInteract(viewingFriendFeed.uid, ev.id, 'event', 'comment', commentInputs[ev.id], replyingTo[ev.id]); } }}
+                                  className={`px-4 py-2 bg-pink-500 text-white text-[11px] font-black hover:bg-pink-600 transition-colors cursor-pointer shadow-sm ${replyingTo[ev.id] ? 'rounded-b-xl rounded-tr-xl' : 'rounded-xl'}`}>Gửi</button>
+                              </div>
                             </div>
+
                           </div>
                         </div>
                       )
