@@ -70,7 +70,7 @@ const GameRoadmap = ({ user }) => {
     title: "TỔNG QUAN PHIÊN BẢN", 
     subtitle: "v7.3",
     displayName: "Nhà Khai Phá",
-    shortId: generateID()
+    shortId: "........" // BÍ QUYẾT LÀ ĐÂY: Hiển thị chấm chấm lúc đang chờ tải
   });
   
   const [events, setEvents] = useState([]);
@@ -86,18 +86,20 @@ const GameRoadmap = ({ user }) => {
     const unsub = onSnapshot(doc(db, "users", user.uid), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
-        let loadedProfile = data.profile || profile;
+        let loadedProfile = data.profile ? { ...data.profile } : { ...profile };
         let needsSave = false;
         
-        // Fix đồng bộ: Nếu tài khoản cũ chưa có ID, tạo mới và CHỐT LƯU lên máy chủ luôn
-        if (!loadedProfile.shortId) {
+        // Chỉ cấp ID và lưu 1 LẦN DUY NHẤT nếu Firestore chưa có
+        if (!loadedProfile.shortId || loadedProfile.shortId === "........") {
           loadedProfile.shortId = generateID();
-          loadedProfile.displayName = loadedProfile.displayName || "Nhà Khai Phá";
           needsSave = true;
         }
-        
+        if (!loadedProfile.displayName) {
+          loadedProfile.displayName = "Nhà Khai Phá";
+          needsSave = true;
+        }
         if (!loadedProfile.background) {
-          loadedProfile.background = loadedProfile.avatar;
+          loadedProfile.background = loadedProfile.avatar || profile.background;
           needsSave = true;
         }
 
@@ -121,7 +123,10 @@ const GameRoadmap = ({ user }) => {
           setFriendsList(data.friends);
         }
       } else {
-        saveToCloud(profile, events, []);
+        // Tài khoản cực mới (Khách vừa vào), tạo trắng và cấp ID ngay
+        const newProfile = { ...profile, shortId: generateID() };
+        setProfile(newProfile);
+        saveToCloud(newProfile, events, []);
       }
     });
     
