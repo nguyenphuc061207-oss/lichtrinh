@@ -33,6 +33,13 @@ const getCat  = (id) => CATEGORIES.find(c => c.id === id) || CATEGORIES[5];
 const getStat = (id) => STATUSES.find(s => s.id === id)   || STATUSES[0];
 const getPri  = (id) => PRIORITIES.find(p => p.id === id) || PRIORITIES[1];
 
+// Helpers Date
+const formatDateToYMD = (dateObj) => {
+  const d = new Date(dateObj);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+const todayYMD = formatDateToYMD(new Date());
+
 // ============================================================
 // MAIN COMPONENT
 // ============================================================
@@ -89,14 +96,14 @@ const GameRoadmap = ({ user }) => {
     avatar:      "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200",
     background:  "https://images.unsplash.com/photo-1541562232579-512a21360020?q=80&w=800",
     title:       "TỔNG QUAN LỊCH TRÌNH",
-    subtitle:    "v7.3",
+    subtitle:    "v7.4",
     displayName: "Người dùng mới",
     shortId:     "........",
     bio:         "",
   });
 
   const [events,        setEvents]        = useState([]);
-  const [dailySchedule, setDailySchedule] = useState([]); // <--- THÊM STATE LỊCH NGÀY
+  const [dailySchedule, setDailySchedule] = useState([]); // Lịch ngày
   const [friendsList,   setFriendsList]   = useState([]);
   const [friendsData,   setFriendsData]   = useState([]);
   const [searchFriendId,    setSearchFriendId]    = useState('');
@@ -131,7 +138,7 @@ const GameRoadmap = ({ user }) => {
           })));
         }
         
-        if (data.dailySchedule) setDailySchedule(data.dailySchedule); // <--- LOAD LỊCH NGÀY
+        if (data.dailySchedule) setDailySchedule(data.dailySchedule);
         if (data.friends) setFriendsList(data.friends);
       } else {
         const newProfile = { ...profile, shortId: generateID() };
@@ -161,7 +168,6 @@ const GameRoadmap = ({ user }) => {
     fetchFriendsData();
   }, [friendsList]);
 
-  // Cập nhật hàm saveToCloud để lưu thêm dailySchedule
   const saveToCloud = async (newProfile, newEvents, newFriends = friendsList, newDaily = dailySchedule) => {
     if (!user) return;
     try {
@@ -199,12 +205,47 @@ const GameRoadmap = ({ user }) => {
   // ── 5. SETTINGS MODAL STATE ────────────────────────────────
   const [isSettingsOpen,   setIsSettingsOpen]   = useState(false);
   const [activeTab,        setActiveTab]        = useState('profile');
-  const [profileFormData,  setProfileFormData]  = useState(profile);
-  const [dailyForm,        setDailyForm]        = useState({ time: '', task: '' }); // <--- FORM LỊCH NGÀY
   const [eventFormData,    setEventFormData]    = useState({
     title: '', startDate: '', endDate: '', rewards: '', notes: '',
     category: 'study', status: 'todo', priority: 'medium', progress: 0,
   });
+
+  // DAILY SCHEDULE STATE & LOGIC
+  const [dailyViewDate, setDailyViewDate] = useState(todayYMD);
+  const [dailyForm, setDailyForm] = useState({ 
+    startDate: todayYMD, 
+    time: '', 
+    task: '',
+    repeat: 'none',
+    customDays: 1,
+    isShared: false 
+  });
+
+  // Hàm cốt lõi: Kiểm tra xem 1 task có xuất hiện vào targetDate không
+  const checkTaskOnDate = (task, targetDateStr) => {
+    const start = new Date(task.startDate); start.setHours(0,0,0,0);
+    const target = new Date(targetDateStr); target.setHours(0,0,0,0);
+    
+    if (target < start) return false; // Chưa tới ngày bắt đầu
+
+    const diffTime = Math.abs(target - start);
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+    if (task.repeat === 'none')     return diffDays === 0;
+    if (task.repeat === 'daily')    return true;
+    if (task.repeat === 'weekly')   return diffDays % 7 === 0;
+    if (task.repeat === 'biweekly') return diffDays % 14 === 0;
+    if (task.repeat === 'yearly')   return start.getDate() === target.getDate() && start.getMonth() === target.getMonth();
+    if (task.repeat === 'custom')   return diffDays % (task.customDays || 1) === 0;
+    
+    return false;
+  };
+
+  const filteredDailySchedule = useMemo(() => {
+    return dailySchedule
+      .filter(t => checkTaskOnDate(t, dailyViewDate))
+      .sort((a, b) => a.time.localeCompare(b.time));
+  }, [dailySchedule, dailyViewDate]);
 
   // ── 6. IMAGE CROP ──────────────────────────────────────────
   const [isCropModalOpen, setIsCropModalOpen] = useState(false);
@@ -347,25 +388,40 @@ const GameRoadmap = ({ user }) => {
     setSelectedEventDetail(updated.find(e => e.id === eventId));
   };
 
-  // ── HANDLERS CHO LỊCH NGÀY (DAILY SCHEDULE) ──
+  // ── HANDLERS CHO LỊCH NGÀY ──
   const handleAddDailyTask = (e) => {
     e.preventDefault();
-    if (!dailyForm.time || !dailyForm.task) return;
+    if (!dailyForm.time || !dailyForm.task || !dailyForm.startDate) return;
     const newTask = {
       id: "dl_" + Date.now(),
+      startDate: dailyForm.startDate,
       time: dailyForm.time,
       task: dailyForm.task,
-      isDone: false
+      repeat: dailyForm.repeat,
+      customDays: Number(dailyForm.customDays) || 1,
+      isShared: dailyForm.isShared,
+      completedDates: [] // Thay isDone boolean thành mảng lưu các ngày đã hoàn thành
     };
-    // Thêm và tự động sắp xếp theo giờ tăng dần
-    const updated = [...dailySchedule, newTask].sort((a, b) => a.time.localeCompare(b.time));
+    
+    const updated = [...dailySchedule, newTask];
     setDailySchedule(updated);
     saveToCloud(profile, events, friendsList, updated);
-    setDailyForm({ time: '', task: '' });
+    
+    // Reset form task, giữ nguyên ngày/cấu hình lặp cho tiện nhập tiếp
+    setDailyForm(p => ({ ...p, time: '', task: '' }));
   };
 
-  const handleToggleDailyTask = (id) => {
-    const updated = dailySchedule.map(t => t.id === id ? { ...t, isDone: !t.isDone } : t);
+  const handleToggleDailyTask = (id, targetDateStr) => {
+    const updated = dailySchedule.map(t => {
+      if (t.id === id) {
+        const isCompleted = t.completedDates?.includes(targetDateStr);
+        const newCompleted = isCompleted 
+          ? (t.completedDates || []).filter(d => d !== targetDateStr)
+          : [...(t.completedDates || []), targetDateStr];
+        return { ...t, completedDates: newCompleted };
+      }
+      return t;
+    });
     setDailySchedule(updated);
     saveToCloud(profile, events, friendsList, updated);
   };
@@ -375,7 +431,7 @@ const GameRoadmap = ({ user }) => {
     setDailySchedule(updated);
     saveToCloud(profile, events, friendsList, updated);
   };
-  // ─────────────────────────────────────────────
+  // ────────────────────────────
 
   const handleAddFriend = async (e) => {
     e.preventDefault();
@@ -395,13 +451,25 @@ const GameRoadmap = ({ user }) => {
     if (!fDoc.exists()) return;
     const fData = fDoc.data(); let fProfile = fData.profile;
     if (!fProfile.background) fProfile.background = fProfile.avatar;
+    
+    // Lấy event công khai
+    const sharedEvents = (fData.events || []).filter(ev => ev.isShared).map(ev => ({
+      ...ev,
+      start: ev.start.toDate ? ev.start.toDate() : new Date(ev.start),
+      end:   ev.end.toDate   ? ev.end.toDate()   : new Date(ev.end),
+    })).sort((a, b) => a.start - b.start);
+
+    // Lấy daily công khai TRONG HÔM NAY (chỉ show nếu tới ngày)
+    const todayStr = formatDateToYMD(new Date());
+    const sharedDaily = (fData.dailySchedule || [])
+      .filter(t => t.isShared && checkTaskOnDate(t, todayStr))
+      .sort((a, b) => a.time.localeCompare(b.time));
+
     setViewingFriendFeed({
       profile: fProfile,
-      events: (fData.events || []).filter(ev => ev.isShared).map(ev => ({
-        ...ev,
-        start: ev.start.toDate ? ev.start.toDate() : new Date(ev.start),
-        end:   ev.end.toDate   ? ev.end.toDate()   : new Date(ev.end),
-      })).sort((a, b) => a.start - b.start),
+      events: sharedEvents,
+      daily: sharedDaily,
+      viewDate: todayStr
     });
     setIsSettingsOpen(false);
   };
@@ -802,7 +870,7 @@ const GameRoadmap = ({ user }) => {
                 {[
                   { id: 'profile', label: 'Tài Khoản',     icon: '⚙️' },
                   { id: 'events',  label: 'Quản Lý Lịch',  icon: '📅' },
-                  { id: 'daily',   label: 'Lịch Ngày',     icon: '⏰' }, // <--- THÊM TAB LỊCH NGÀY TẠI ĐÂY
+                  { id: 'daily',   label: 'Lịch Ngày',     icon: '⏰' },
                   { id: 'friends', label: 'Bạn Bè',         icon: '👥' },
                 ].map(tab => (
                   <button key={tab.id} onClick={() => setActiveTab(tab.id)}
@@ -825,7 +893,7 @@ const GameRoadmap = ({ user }) => {
               {/* ── TAB: TÀI KHOẢN ── */}
               {activeTab === 'profile' && (
                 <div className="space-y-6">
-                  {/* Preview */}
+                  {/* ... Code cũ ... */}
                   <div className="relative h-32 rounded-3xl overflow-hidden border-[3px] border-white shadow-md bg-white">
                     <img src={profileFormData.background} alt="bg" className="absolute inset-0 w-full h-full object-cover opacity-80" />
                     <div className="absolute inset-0 bg-gradient-to-r from-white/90 to-transparent"></div>
@@ -908,12 +976,11 @@ const GameRoadmap = ({ user }) => {
 
                   {/* Add Event Form */}
                   <form onSubmit={handleAddEvent} className="space-y-4 bg-white p-5 rounded-3xl border-2 border-slate-100 shadow-sm">
+                    {/* ... Form input events giữ nguyên như cũ ... */}
                     <div className="text-[13px] font-black uppercase text-pink-500 flex items-center gap-2 mb-2"><span className="text-xl">✏️</span> Thêm sự kiện mới</div>
-
                     <input required type="text" placeholder="Tên sự kiện / môn học..."
                       className="w-full rounded-2xl px-4 py-3 text-sm font-semibold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-pink-400 focus:bg-white transition-all"
                       value={eventFormData.title} onChange={e => setEventFormData(p => ({ ...p, title: e.target.value }))} />
-
                     <div className="grid grid-cols-2 gap-4">
                       {[{ key: 'startDate', label: 'Từ ngày' }, { key: 'endDate', label: 'Đến ngày' }].map(f => (
                         <div key={f.key}>
@@ -923,8 +990,6 @@ const GameRoadmap = ({ user }) => {
                         </div>
                       ))}
                     </div>
-
-                    {/* Category */}
                     <div>
                       <label className="text-[10px] font-black uppercase mb-2 block text-indigo-400">Danh mục</label>
                       <div className="flex flex-wrap gap-2">
@@ -937,9 +1002,7 @@ const GameRoadmap = ({ user }) => {
                         ))}
                       </div>
                     </div>
-
                     <div className="grid grid-cols-2 gap-4">
-                      {/* Priority */}
                       <div>
                         <label className="text-[10px] font-black uppercase mb-2 block text-indigo-400">Độ ưu tiên</label>
                         <div className="flex gap-1.5 bg-slate-50 p-1.5 rounded-2xl border-2 border-slate-200">
@@ -952,8 +1015,6 @@ const GameRoadmap = ({ user }) => {
                           ))}
                         </div>
                       </div>
-
-                      {/* Status */}
                       <div>
                         <label className="text-[10px] font-black uppercase mb-2 block text-indigo-400">Trạng thái ban đầu</label>
                         <select className="w-full rounded-2xl px-3 py-2.5 text-[12px] font-black outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-indigo-400"
@@ -962,7 +1023,6 @@ const GameRoadmap = ({ user }) => {
                         </select>
                       </div>
                     </div>
-
                     <div className="grid grid-cols-2 gap-4">
                       <input type="text" placeholder="🏆 Mục tiêu / Phần thưởng"
                         className="rounded-2xl px-4 py-3 text-sm font-semibold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-amber-400 focus:bg-white transition-all"
@@ -971,8 +1031,6 @@ const GameRoadmap = ({ user }) => {
                         className="rounded-2xl px-4 py-3 text-sm font-semibold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-blue-400 focus:bg-white transition-all"
                         value={eventFormData.notes} onChange={e => setEventFormData(p => ({ ...p, notes: e.target.value }))} />
                     </div>
-
-                    {/* Image Upload */}
                     <div>
                       <label className="text-[10px] font-black uppercase mb-2 block text-pink-500">Ảnh thumbnail (21:9)</label>
                       <div className="flex gap-2 items-center bg-slate-50 p-2 rounded-2xl border-2 border-slate-200 shadow-sm">
@@ -991,7 +1049,6 @@ const GameRoadmap = ({ user }) => {
                         </div>
                       )}
                     </div>
-
                     <button type="submit"
                       className="w-full py-4 mt-2 rounded-2xl font-black uppercase text-sm tracking-wider transition-all hover:-translate-y-1 bg-gradient-to-r from-emerald-400 to-teal-500 text-white shadow-[0_10px_20px_rgba(16,185,129,0.3)]">
                       ✨ TẠO SỰ KIỆN MỚI
@@ -1000,64 +1057,147 @@ const GameRoadmap = ({ user }) => {
                 </div>
               )}
 
-              {/* ── TAB: LỊCH TRÌNH TRONG NGÀY ── */}
+              {/* ── TAB: LỊCH TRÌNH TRONG NGÀY (CẬP NHẬT MỚI) ── */}
               {activeTab === 'daily' && (
                 <div className="space-y-6">
-                  {/* Form thêm task ngày */}
-                  <form onSubmit={handleAddDailyTask} className="bg-white p-5 rounded-3xl border-2 border-slate-100 shadow-sm flex flex-col md:flex-row gap-4 md:items-end">
-                    <div>
-                      <label className="text-[11px] font-black uppercase mb-2 block text-indigo-500">Giờ (HH:MM)</label>
-                      <input required type="time"
-                        className="w-full md:w-auto rounded-2xl px-4 py-3 text-lg font-bold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-indigo-400 focus:bg-white transition-all text-center"
-                        value={dailyForm.time} onChange={e => setDailyForm(p => ({ ...p, time: e.target.value }))} />
+                  
+                  {/* Controls for Viewing Date */}
+                  <div className="flex flex-col sm:flex-row items-center justify-between bg-indigo-50 p-4 rounded-3xl border-2 border-indigo-100 shadow-sm gap-3">
+                    <div className="text-[12px] font-black uppercase text-indigo-600">Đang xem lịch ngày:</div>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => {
+                        const d = new Date(dailyViewDate); d.setDate(d.getDate() - 1);
+                        setDailyViewDate(formatDateToYMD(d));
+                      }} className="w-10 h-10 rounded-xl bg-white border border-indigo-200 text-indigo-600 font-black shadow-sm hover:bg-indigo-600 hover:text-white transition-colors">←</button>
+                      
+                      <input type="date" value={dailyViewDate} onChange={e => setDailyViewDate(e.target.value)}
+                        className="px-4 py-2.5 rounded-xl border-2 border-indigo-200 outline-none font-black text-slate-700 bg-white" />
+                      
+                      <button onClick={() => {
+                        const d = new Date(dailyViewDate); d.setDate(d.getDate() + 1);
+                        setDailyViewDate(formatDateToYMD(d));
+                      }} className="w-10 h-10 rounded-xl bg-white border border-indigo-200 text-indigo-600 font-black shadow-sm hover:bg-indigo-600 hover:text-white transition-colors">→</button>
                     </div>
-                    <div className="flex-1">
-                      <label className="text-[11px] font-black uppercase mb-2 block text-indigo-500">Nội dung công việc</label>
-                      <input required type="text" placeholder="Ví dụ: Tập thể dục, Học tiếng Anh..."
-                        className="w-full rounded-2xl px-4 py-3 text-sm font-semibold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-indigo-400 focus:bg-white transition-all"
-                        value={dailyForm.task} onChange={e => setDailyForm(p => ({ ...p, task: e.target.value }))} />
+                    <button onClick={() => setDailyViewDate(todayYMD)} 
+                      className={`text-[11px] font-black px-4 py-2.5 rounded-xl transition-all shadow-sm ${dailyViewDate === todayYMD ? 'bg-indigo-600 text-white' : 'bg-white text-indigo-600 border border-indigo-200'}`}>Hôm nay</button>
+                  </div>
+
+                  {/* Add Task Form */}
+                  <form onSubmit={handleAddDailyTask} className="bg-white p-5 rounded-3xl border-2 border-slate-100 shadow-sm flex flex-col gap-4">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {/* Ngày bắt đầu */}
+                      <div className="col-span-2 md:col-span-1">
+                        <label className="text-[10px] font-black uppercase mb-1.5 block text-indigo-500">Từ ngày</label>
+                        <input required type="date"
+                          className="w-full rounded-2xl px-3 py-2.5 text-sm font-bold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-indigo-400 focus:bg-white transition-all"
+                          value={dailyForm.startDate} onChange={e => setDailyForm(p => ({ ...p, startDate: e.target.value }))} />
+                      </div>
+                      
+                      {/* Giờ */}
+                      <div className="col-span-2 md:col-span-1">
+                        <label className="text-[10px] font-black uppercase mb-1.5 block text-indigo-500">Giờ (00-23)</label>
+                        <input required type="time"
+                          className="w-full rounded-2xl px-3 py-2.5 text-lg font-bold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-indigo-400 focus:bg-white transition-all text-center"
+                          value={dailyForm.time} onChange={e => setDailyForm(p => ({ ...p, time: e.target.value }))} />
+                      </div>
+                      
+                      {/* Lặp lại */}
+                      <div className="col-span-2">
+                        <label className="text-[10px] font-black uppercase mb-1.5 block text-indigo-500">Chu kỳ lặp</label>
+                        <select
+                          className="w-full rounded-2xl px-3 py-3 text-[13px] font-bold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-indigo-400"
+                          value={dailyForm.repeat} onChange={e => setDailyForm(p => ({ ...p, repeat: e.target.value }))}>
+                          <option value="none">Không lặp lại</option>
+                          <option value="daily">Mỗi ngày</option>
+                          <option value="weekly">Mỗi tuần</option>
+                          <option value="biweekly">Mỗi 2 tuần</option>
+                          <option value="yearly">Mỗi năm</option>
+                          <option value="custom">Tùy chỉnh (Số ngày)</option>
+                        </select>
+                      </div>
                     </div>
-                    <button type="submit"
-                      className="w-full md:w-auto px-6 py-3.5 rounded-2xl font-black text-sm transition-all hover:-translate-y-1 shadow-[0_10px_20px_rgba(99,102,241,0.3)] bg-gradient-to-r from-indigo-500 to-blue-500 text-white">
-                      ➕ THÊM VÀO LỊCH
-                    </button>
+
+                    {/* Hàng 2: Nội dung + Tùy chỉnh + Submit */}
+                    <div className="flex flex-col md:flex-row gap-4 items-end">
+                      <div className="flex-1 w-full relative">
+                        <label className="text-[10px] font-black uppercase mb-1.5 block text-indigo-500">Nội dung công việc</label>
+                        <input required type="text" placeholder="Ví dụ: Tập thể dục..."
+                          className="w-full rounded-2xl px-4 py-3 text-sm font-semibold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-indigo-400 focus:bg-white transition-all pr-24"
+                          value={dailyForm.task} onChange={e => setDailyForm(p => ({ ...p, task: e.target.value }))} />
+                          
+                        {/* Nút Công Khai Nhanh */}
+                        <label className="absolute right-2 bottom-2 bg-pink-50 border border-pink-200 text-pink-600 px-3 py-1.5 rounded-xl text-[10px] font-black cursor-pointer flex items-center gap-1.5 transition-colors hover:bg-pink-100">
+                          <input type="checkbox" checked={dailyForm.isShared} onChange={e => setDailyForm(p => ({ ...p, isShared: e.target.checked }))} className="accent-pink-500" />
+                          Công khai
+                        </label>
+                      </div>
+
+                      {dailyForm.repeat === 'custom' && (
+                        <div className="w-full md:w-24">
+                          <label className="text-[10px] font-black uppercase mb-1.5 block text-indigo-500">Số ngày</label>
+                          <input required type="number" min="2" max="365"
+                            className="w-full rounded-2xl px-3 py-3 text-sm font-bold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-indigo-400 focus:bg-white transition-all text-center"
+                            value={dailyForm.customDays} onChange={e => setDailyForm(p => ({ ...p, customDays: e.target.value }))} />
+                        </div>
+                      )}
+
+                      <button type="submit"
+                        className="w-full md:w-auto px-6 py-3.5 rounded-2xl font-black text-sm transition-all hover:-translate-y-1 shadow-[0_10px_20px_rgba(99,102,241,0.3)] bg-gradient-to-r from-indigo-500 to-blue-500 text-white whitespace-nowrap">
+                        ➕ THÊM VÀO LỊCH
+                      </button>
+                    </div>
                   </form>
 
-                  {/* Danh sách task */}
+                  {/* Task List hiển thị THEO NGÀY ĐANG XEM */}
                   <div className="rounded-3xl p-5 bg-white border-2 border-slate-100 shadow-sm">
                     <div className="text-[13px] font-black uppercase text-indigo-500 mb-4 flex items-center gap-2">
-                      <span className="text-xl">⏰</span> Lịch trình hôm nay ({dailySchedule.length})
+                      <span className="text-xl">⏰</span> Lịch trình ngày {dailyViewDate} ({filteredDailySchedule.length})
                     </div>
                     
-                    {dailySchedule.length === 0 ? (
+                    {filteredDailySchedule.length === 0 ? (
                       <div className="text-[13px] italic text-slate-400 py-6 text-center border-2 border-dashed border-slate-100 rounded-2xl">
-                        Chưa có lịch trình nào được tạo. Hãy lên kế hoạch cho ngày mới nhé!
+                        Trống trơn! Hãy dành thời gian nghỉ ngơi hoặc lên kế hoạch mới nhé.
                       </div>
                     ) : (
                       <div className="space-y-3">
-                        {dailySchedule.map(item => (
-                          <div key={item.id} className={`flex items-center gap-4 p-3.5 rounded-2xl border-2 transition-all ${item.isDone ? 'bg-slate-50 border-slate-100 opacity-60' : 'bg-white border-indigo-100 hover:border-indigo-300 shadow-sm hover:-translate-y-0.5'}`}>
-                            
-                            <button onClick={() => handleToggleDailyTask(item.id)}
-                              className={`w-7 h-7 rounded-full flex items-center justify-center text-sm shrink-0 transition-colors shadow-inner ${item.isDone ? 'bg-emerald-500 text-white border border-emerald-600' : 'bg-slate-50 border-2 border-slate-300 text-transparent hover:border-emerald-400'}`}>
-                              ✔
-                            </button>
-                            
-                            <div className={`text-[15px] font-black font-mono px-3 py-1.5 rounded-xl border shrink-0 ${item.isDone ? 'bg-slate-100 text-slate-400 border-slate-200' : 'bg-indigo-50 text-indigo-600 border-indigo-200'}`}>
-                              {item.time}
+                        {filteredDailySchedule.map(item => {
+                          const isDoneOnThisDate = item.completedDates?.includes(dailyViewDate);
+                          return (
+                            <div key={item.id} className={`flex items-center gap-3 md:gap-4 p-3.5 rounded-2xl border-2 transition-all ${isDoneOnThisDate ? 'bg-slate-50 border-slate-100 opacity-60' : 'bg-white border-indigo-100 hover:border-indigo-300 shadow-sm hover:-translate-y-0.5'}`}>
+                              
+                              <button onClick={() => handleToggleDailyTask(item.id, dailyViewDate)}
+                                className={`w-7 h-7 rounded-full flex items-center justify-center text-sm shrink-0 transition-colors shadow-inner ${isDoneOnThisDate ? 'bg-emerald-500 text-white border border-emerald-600' : 'bg-slate-50 border-2 border-slate-300 text-transparent hover:border-emerald-400'}`}>
+                                ✔
+                              </button>
+                              
+                              <div className={`text-[13px] md:text-[15px] font-black font-mono px-2 md:px-3 py-1.5 rounded-xl border shrink-0 ${isDoneOnThisDate ? 'bg-slate-100 text-slate-400 border-slate-200' : 'bg-indigo-50 text-indigo-600 border-indigo-200'}`}>
+                                {item.time}
+                              </div>
+                              
+                              <div className="flex-1 min-w-0">
+                                <div className={`text-[13px] md:text-[14px] font-bold truncate ${isDoneOnThisDate ? 'line-through text-slate-400' : 'text-slate-700'}`}>
+                                  {item.task}
+                                </div>
+                                {/* Badge Info */}
+                                <div className="flex gap-1.5 mt-1">
+                                  {item.repeat !== 'none' && (
+                                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded border border-slate-200 text-slate-400 bg-slate-50">
+                                      🔄 {item.repeat === 'custom' ? `${item.customDays} ngày` : item.repeat}
+                                    </span>
+                                  )}
+                                  {item.isShared && (
+                                    <span className="text-[9px] font-black px-1.5 py-0.5 rounded border border-pink-200 text-pink-500 bg-pink-50">📢 Công khai</span>
+                                  )}
+                                </div>
+                              </div>
+                              
+                              <button onClick={() => handleDeleteDailyTask(item.id)}
+                                className="w-8 h-8 md:w-9 md:h-9 flex items-center justify-center rounded-xl bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-colors border border-red-100 shrink-0">
+                                ✕
+                              </button>
                             </div>
-                            
-                            <div className={`flex-1 text-[14px] font-bold truncate ${item.isDone ? 'line-through text-slate-400' : 'text-slate-700'}`}>
-                              {item.task}
-                            </div>
-                            
-                            <button onClick={() => handleDeleteDailyTask(item.id)}
-                              className="w-9 h-9 flex items-center justify-center rounded-xl bg-red-50 text-red-500 hover:bg-red-500 hover:text-white transition-colors border border-red-100">
-                              ✕
-                            </button>
-
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -1080,7 +1220,6 @@ const GameRoadmap = ({ user }) => {
                     </button>
                   </form>
 
-                  {/* ID hiển thị */}
                   <div className="p-5 rounded-3xl text-center bg-gradient-to-br from-indigo-50 to-pink-50 border-2 border-dashed border-indigo-200 shadow-inner">
                     <div className="text-[11px] font-black uppercase mb-2 text-indigo-500">ID Của Bạn (Chia sẻ để kết bạn)</div>
                     <div className="font-black text-3xl tracking-[8px] font-mono text-indigo-600 drop-shadow-sm bg-white inline-block px-6 py-2 rounded-2xl border-2 border-white shadow-sm">{profile.shortId}</div>
@@ -1110,8 +1249,10 @@ const GameRoadmap = ({ user }) => {
       )}
 
       {/* ════════════════════════════════════════════════════════
-          STATISTICS MODAL
+          STATISTICS & EVENT DETAIL & DEADLINE & CROP MODALS
       ════════════════════════════════════════════════════════ */}
+      {/* ... Phần Modals thống kê, chi tiết sự kiện, crop ảnh hoàn toàn giữ nguyên như cũ ... */}
+      {/* Thống kê */}
       {isStatsOpen && (
         <div className="fixed inset-0 flex items-center justify-center z-50 p-4" style={{ background: 'rgba(255,255,255,0.8)', backdropFilter: 'blur(10px)' }} onClick={() => setIsStatsOpen(false)}>
           <div className="w-full max-w-[520px] rounded-[2rem] overflow-hidden bg-white border-[3px] border-indigo-100 shadow-[0_20px_50px_rgba(79,70,229,0.15)] relative" onClick={e => e.stopPropagation()}>
@@ -1169,9 +1310,7 @@ const GameRoadmap = ({ user }) => {
         </div>
       )}
 
-      {/* ════════════════════════════════════════════════════════
-          EVENT DETAIL MODAL
-      ════════════════════════════════════════════════════════ */}
+      {/* Chi tiết Event */}
       {selectedEventDetail && (
         <div className="fixed inset-0 flex items-center justify-center z-[120] p-4" style={{ background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)' }} onClick={() => setSelectedEventDetail(null)}>
           <div className="w-full max-w-[420px] rounded-[2rem] overflow-hidden shadow-[0_20px_60px_rgba(0,0,0,0.1)] bg-white relative flex flex-col" onClick={e => e.stopPropagation()}
@@ -1270,9 +1409,7 @@ const GameRoadmap = ({ user }) => {
         </div>
       )}
 
-      {/* ════════════════════════════════════════════════════════
-          DEADLINE MODAL
-      ════════════════════════════════════════════════════════ */}
+      {/* Deadline */}
       {isDeadlineModalOpen && (
         <div className="fixed inset-0 flex items-center justify-center z-[110] p-4" style={{ background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)' }} onClick={() => setIsDeadlineModalOpen(false)}>
           <div className="w-full max-w-[400px] max-h-[80vh] rounded-[2rem] overflow-hidden flex flex-col bg-white border-4 border-red-100 shadow-[0_20px_50px_rgba(239,68,68,0.15)]" onClick={e => e.stopPropagation()}>
@@ -1308,9 +1445,7 @@ const GameRoadmap = ({ user }) => {
         </div>
       )}
 
-      {/* ════════════════════════════════════════════════════════
-          CROP MODAL
-      ════════════════════════════════════════════════════════ */}
+      {/* Crop Ảnh */}
       {isCropModalOpen && upImg && (
         <div className="fixed inset-0 flex flex-col items-center justify-center z-[100] p-4" style={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(15px)' }}>
           <div className="text-center mb-6">
@@ -1338,7 +1473,7 @@ const GameRoadmap = ({ user }) => {
       )}
 
       {/* ════════════════════════════════════════════════════════
-          FRIEND FEED MODAL
+          FRIEND FEED MODAL (CẬP NHẬT HIỂN THỊ LỊCH NGÀY)
       ════════════════════════════════════════════════════════ */}
       {viewingFriendFeed && (
         <div className="fixed inset-0 flex items-center justify-center z-[130] p-2 md:p-4" style={{ background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)' }} onClick={() => setViewingFriendFeed(null)}>
@@ -1362,36 +1497,63 @@ const GameRoadmap = ({ user }) => {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto pt-16 px-6 pb-6 custom-scrollbar space-y-4 bg-slate-50/50">
-              {viewingFriendFeed.events.length === 0 ? (
-                <div className="text-center py-12 bg-white rounded-3xl border-2 border-dashed border-pink-100">
-                  <div className="text-5xl mb-4">💤</div>
-                  <div className="text-[14px] font-black text-slate-400">Người dùng này chưa chia sẻ sự kiện nào.</div>
-                </div>
-              ) : (
-                <div className="relative border-l-[3px] border-pink-200 ml-4 space-y-6">
-                  {viewingFriendFeed.events.map(ev => {
-                    const cat = getCat(ev.category);
-                    return (
-                      <div key={ev.id} className="relative pl-7">
-                        <div className="absolute -left-[11px] top-4 w-5 h-5 bg-pink-400 rounded-full border-[4px] border-white shadow-md flex items-center justify-center"></div>
-                        
-                        <div className="bg-white border-2 border-pink-100 rounded-3xl p-4 shadow-sm hover:shadow-md transition-shadow hover:-translate-y-0.5">
-                          <div className="flex items-center gap-2 mb-3">
-                            <div className="text-[10px] font-black text-white bg-pink-400 inline-block px-2.5 py-1 rounded-lg shadow-sm">{ev.dateStr}</div>
-                            <div className="text-[10px] font-black px-2 py-1 rounded-lg bg-slate-50 text-slate-500 border border-slate-100">{cat.icon} {cat.label}</div>
-                          </div>
-                          <h4 className="font-black text-slate-800 text-lg mb-3 leading-tight">{ev.title}</h4>
-                          <img src={ev.image} alt="ev-img" className="w-full h-36 md:h-44 object-cover rounded-2xl border border-slate-100 shadow-sm" />
-                          {ev.rewards && (
-                            <p className="mt-3 text-[12px] text-amber-700 font-bold bg-amber-50 p-2.5 rounded-xl border border-amber-100 flex items-center gap-2 shadow-inner"><span className="text-lg">⭐</span> {ev.rewards}</p>
-                          )}
+            <div className="flex-1 overflow-y-auto pt-16 px-6 pb-6 custom-scrollbar space-y-6 bg-slate-50/50">
+              
+              {/* Lịch Ngày Của Bạn Bè (Chỉ hiển thị nếu có task công khai trong ngày hôm nay) */}
+              {viewingFriendFeed.daily && viewingFriendFeed.daily.length > 0 && (
+                <div className="bg-indigo-50 border border-indigo-100 p-4 rounded-3xl shadow-sm">
+                  <h4 className="text-[11px] font-black text-indigo-500 uppercase mb-3 flex items-center gap-1.5">
+                    <span className="text-sm">⏰</span> Lịch trình hôm nay ({viewingFriendFeed.viewDate})
+                  </h4>
+                  <div className="space-y-2">
+                    {viewingFriendFeed.daily.map(t => {
+                      const isDone = t.completedDates?.includes(viewingFriendFeed.viewDate);
+                      return (
+                        <div key={t.id} className={`flex items-center gap-3 p-2.5 rounded-2xl border bg-white ${isDone ? 'border-slate-100 opacity-60' : 'border-indigo-100'}`}>
+                          <div className={`text-[12px] font-black font-mono px-2 py-1 rounded-lg ${isDone ? 'bg-slate-100 text-slate-400' : 'bg-indigo-100 text-indigo-600'}`}>{t.time}</div>
+                          <div className={`text-[13px] font-bold flex-1 truncate ${isDone ? 'line-through text-slate-400' : 'text-slate-700'}`}>{t.task}</div>
+                          {isDone && <span className="text-emerald-500 text-sm font-black mr-2">✔</span>}
                         </div>
-                      </div>
-                    )
-                  })}
+                      )
+                    })}
+                  </div>
                 </div>
               )}
+
+              {/* Lịch Sự Kiện */}
+              <div>
+                <h4 className="text-[11px] font-black text-pink-500 uppercase mb-4 flex items-center gap-1.5 ml-2">
+                  <span className="text-sm">📅</span> Sự kiện lớn sắp tới
+                </h4>
+                {viewingFriendFeed.events.length === 0 ? (
+                  <div className="text-center py-10 bg-white rounded-3xl border-2 border-dashed border-pink-100">
+                    <div className="text-5xl mb-4">💤</div>
+                    <div className="text-[14px] font-black text-slate-400">Người dùng này chưa chia sẻ sự kiện nào.</div>
+                  </div>
+                ) : (
+                  <div className="relative border-l-[3px] border-pink-200 ml-4 space-y-6">
+                    {viewingFriendFeed.events.map(ev => {
+                      const cat = getCat(ev.category);
+                      return (
+                        <div key={ev.id} className="relative pl-7">
+                          <div className="absolute -left-[11px] top-4 w-5 h-5 bg-pink-400 rounded-full border-[4px] border-white shadow-md flex items-center justify-center"></div>
+                          <div className="bg-white border-2 border-pink-100 rounded-3xl p-4 shadow-sm hover:shadow-md transition-shadow hover:-translate-y-0.5">
+                            <div className="flex items-center gap-2 mb-3">
+                              <div className="text-[10px] font-black text-white bg-pink-400 inline-block px-2.5 py-1 rounded-lg shadow-sm">{ev.dateStr}</div>
+                              <div className="text-[10px] font-black px-2 py-1 rounded-lg bg-slate-50 text-slate-500 border border-slate-100">{cat.icon} {cat.label}</div>
+                            </div>
+                            <h4 className="font-black text-slate-800 text-lg mb-3 leading-tight">{ev.title}</h4>
+                            <img src={ev.image} alt="ev-img" className="w-full h-36 md:h-44 object-cover rounded-2xl border border-slate-100 shadow-sm" />
+                            {ev.rewards && (
+                              <p className="mt-3 text-[12px] text-amber-700 font-bold bg-amber-50 p-2.5 rounded-xl border border-amber-100 flex items-center gap-2 shadow-inner"><span className="text-lg">⭐</span> {ev.rewards}</p>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -1407,6 +1569,8 @@ const GameRoadmap = ({ user }) => {
         input[type=range]::-webkit-slider-thumb { cursor: pointer; }
         input[type="time"]::-webkit-calendar-picker-indicator { cursor: pointer; opacity: 0.6; transition: opacity 0.2s; }
         input[type="time"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
+        input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; opacity: 0.6; transition: opacity 0.2s; }
+        input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
       ` }} />
     </div>
   );
