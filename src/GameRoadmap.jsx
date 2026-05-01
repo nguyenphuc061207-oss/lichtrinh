@@ -104,7 +104,7 @@ const GameRoadmap = ({ user }) => {
     avatar:      "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200",
     background:  "https://images.unsplash.com/photo-1541562232579-512a21360020?q=80&w=800",
     title:       "TỔNG QUAN LỊCH TRÌNH",
-    subtitle:    "v10.0",
+    subtitle:    "v10.5",
     displayName: "Người dùng mới",
     shortId:     "........",
     bio:         "",
@@ -124,7 +124,7 @@ const GameRoadmap = ({ user }) => {
   const [replyingTo,        setReplyingTo]        = useState({}); 
   const [isLoading,         setIsLoading]         = useState(true);
 
-  // Auto-scroll logic
+  // Auto-scroll logic cho Thông báo
   useEffect(() => {
     if (viewingFriendFeed && targetScrollId) {
       setTimeout(() => {
@@ -401,7 +401,7 @@ const GameRoadmap = ({ user }) => {
     setIsCropModalOpen(false); setUpImg(null);
   };
 
-  // ── 7. HANDLERS ────────────────────────────────────────────
+  // ── 7. HANDLERS TÀI KHOẢN & SỰ KIỆN ──
   const handleSaveProfile = () => {
     const upd = {
       ...profile,
@@ -523,7 +523,6 @@ const GameRoadmap = ({ user }) => {
     saveToCloud(profile, events, friendsList, updated, notifications, specialEvents);
   };
 
-  // ── HANDLERS CHO SỰ KIỆN ĐẶC BIỆT ──
   const handleAddSpecialEvent = (e) => {
     e.preventDefault();
     if (!specialForm.title || !specialForm.date) return;
@@ -540,7 +539,7 @@ const GameRoadmap = ({ user }) => {
     saveToCloud(profile, events, friendsList, dailySchedule, notifications, updated);
   };
 
-  // ── BẠN BÈ MỚI: GỬI LỜI MỜI & XOÁ BẠN ──
+  // ── 🔥 BẠN BÈ: GỬI YÊU CẦU & CHẤP NHẬN/TỪ CHỐI & XOÁ BẠN ──
   const handleAddFriend = async (e) => {
     e.preventDefault();
     if (searchFriendId === profile.shortId) { alert("Bạn không thể tự kết bạn với chính mình!"); return; }
@@ -578,14 +577,12 @@ const GameRoadmap = ({ user }) => {
 
   const handleAcceptFriend = async (notif) => {
     try {
-      // 1. Thêm vào danh sách của mình & đánh dấu đã xử lý
       const newFriends = [...friendsList, notif.fromUid];
       const newNotifs = notifications.map(n => n.id === notif.id ? { ...n, handled: true, read: true } : n);
       setFriendsList(newFriends);
       setNotifications(newNotifs);
       await setDoc(doc(db, "users", user.uid), { friends: newFriends, notifications: newNotifs }, { merge: true });
 
-      // 2. Thêm vào danh sách của người kia & Gửi thông báo chấp nhận
       const targetRef = doc(db, "users", notif.fromUid);
       const targetSnap = await getDoc(targetRef);
       if (targetSnap.exists()) {
@@ -715,7 +712,6 @@ const GameRoadmap = ({ user }) => {
   };
 
   const handleViewFriendFeed = async (friendUid, overrideDate = null) => {
-    // 🔥 Bảo mật: Chỉ cho xem nếu là bạn bè hoặc chính mình
     if (friendUid !== user.uid && !friendsList.includes(friendUid)) {
       alert("Chỉ bạn bè mới có thể xem trang công khai của nhau!");
       return;
@@ -739,8 +735,9 @@ const GameRoadmap = ({ user }) => {
     setIsSettingsOpen(false);
   };
 
+  // 🔥 XỬ LÝ CLICK THÔNG BÁO VÀ AUTO-SCROLL ĐẾN POST
   const handleNotifClick = async (notif) => {
-    if (notif.itemType === 'friend_request') return; // Không điều hướng với loại này
+    if (notif.itemType === 'friend_request') return; 
 
     const updated = notifications.map(n => n.id === notif.id ? {...n, read: true} : n);
     setNotifications(updated);
@@ -756,7 +753,7 @@ const GameRoadmap = ({ user }) => {
     }
     
     await handleViewFriendFeed(targetUid, targetDate);
-    setTargetScrollId(notif.itemId);
+    setTargetScrollId(notif.itemId); 
   };
 
   const markNotifsRead = async () => {
@@ -770,12 +767,34 @@ const GameRoadmap = ({ user }) => {
 
   const handleLogout = () => signOut(auth).catch(console.error);
 
-  // ── 8. HELPERS ─────────────────────────────────────────────
+  // ── 8. HELPERS CHỈ SỐ ─────────────────────────────────────────────
+  const getDaysLeft = (ev) => {
+    if (!ev.end) return 0;
+    return Math.ceil((ev.end.getTime() - now.getTime()) / 86400000);
+  };
   const getEventProgress = (ev) => {
     if (ev.status === 'done') return 100;
     if (ev.status === 'todo') return 0;
     return ev.progress || 0;
   };
+
+  const stats = useMemo(() => {
+    const safeEvents = Array.isArray(events) ? events : [];
+    const total     = safeEvents.length;
+    const done      = safeEvents.filter(e => e.status === 'done').length;
+    const inProg    = safeEvents.filter(e => e.status === 'in-progress').length;
+    const upcoming  = safeEvents.filter(e => e.start && e.start > now).length;
+    const catBreakdown = CATEGORIES.map(c => ({ ...c, count: safeEvents.filter(e => e.category === c.id).length }));
+    return { total, done, inProg, upcoming, catBreakdown };
+  }, [events]);
+
+  const urgentEvents = useMemo(() => {
+    return (Array.isArray(events) ? events : []).filter(ev => { 
+      if(!ev.end) return false;
+      const d = getDaysLeft(ev); 
+      return d >= 0 && d <= 3 && ev.status !== 'done'; 
+    });
+  }, [events]);
 
   const validNotifs = Array.isArray(notifications) ? notifications.filter(n => n && n.id) : [];
   const unreadNotifs = validNotifs.filter(n => n.read === false).length;
@@ -901,21 +920,20 @@ const GameRoadmap = ({ user }) => {
         {/* ═══ BODY ══════════════════════════════════════════════ */}
         <div className="flex flex-1 overflow-hidden gap-3 p-3 bg-slate-50 z-10">
 
-          {/* ── SIDEBAR (GỌN GÀNG - HIỂN THỊ SỰ KIỆN QUAN TRỌNG) ── */}
+          {/* ── SIDEBAR ── */}
           <div className={`w-full md:w-[280px] shrink-0 flex flex-col gap-3 ${showMobileMap ? 'hidden md:flex' : 'flex'}`}>
 
             {/* Profile Card */}
             <div className="relative rounded-2xl overflow-hidden flex-none h-[200px] shadow-sm border-2 border-pink-100 bg-white">
               <img src={profile.background} alt="bg" className="absolute inset-0 w-full h-full object-cover" />
-              {/* Lớp hiển thị nội dung nằm trên cùng, bỏ kính mờ để chữ rõ */}
+              <div className="absolute inset-0" style={{ background: 'linear-gradient(to top, rgba(255,255,255,1) 0%, rgba(255,255,255,0.1) 60%, transparent 100%)' }}></div>
               <div className="absolute bottom-0 left-0 right-0 p-4 z-10 pointer-events-none">
                 <div className="text-white font-black text-[17px] leading-tight drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">{profile.title}</div>
                 <div className="text-[12px] font-bold mt-0.5 text-pink-300 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">{profile.subtitle}</div>
                 {profile.bio && <div className="text-[11px] font-medium text-slate-800 mt-1.5 line-clamp-2 bg-white/80 p-1.5 rounded-lg border border-white shadow-sm pointer-events-auto">{profile.bio}</div>}
               </div>
               
-              {/* Nút Xem Lịch Trình Mobile - Được tách riêng để không mờ chữ */}
-              <div className="md:hidden absolute inset-0 flex items-center justify-center bg-black/10 opacity-0 hover:opacity-100 active:opacity-100 transition-opacity z-20">
+              <div className="md:hidden absolute inset-0 flex items-center justify-center bg-black/10 transition-opacity z-20">
                 <button onClick={() => setShowMobileMap(true)}
                   className="bg-pink-500 text-white font-black px-6 py-3 rounded-full text-sm shadow-[0_4px_15px_rgba(236,72,153,0.4)] border-2 border-white cursor-pointer active:scale-95">
                   XEM LỊCH TRÌNH 
@@ -1115,7 +1133,7 @@ const GameRoadmap = ({ user }) => {
       </div>
 
       {/* ════════════════════════════════════════════════════════
-          SETTINGS MODAL (Z-INDEX 100 ĐỂ NẰM DƯỚI DROP DOWN NOTIF)
+          SETTINGS MODAL
       ════════════════════════════════════════════════════════ */}
       {isSettingsOpen && (
         <div className="fixed inset-0 flex items-center justify-center z-[100] p-2 md:p-4" style={{ background: 'rgba(255,255,255,0.7)', backdropFilter: 'blur(10px)' }}>
@@ -1188,7 +1206,7 @@ const GameRoadmap = ({ user }) => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     {[
                       { key: 'avatar',     label: 'Ảnh đại diện (1:1)',  target: 'avatar' },
-                      { key: 'background', label: 'Ảnh nền (21:9)', target: 'background' }, // 🔥 Đổi text thành (21:9)
+                      { key: 'background', label: 'Ảnh nền (21:9)', target: 'background' }, 
                     ].map(f => (
                       <div key={f.key}>
                         <label className="text-[11px] font-black uppercase mb-2 block text-pink-500">{f.label}</label>
@@ -1461,7 +1479,7 @@ const GameRoadmap = ({ user }) => {
                 </div>
               )}
 
-              {/* ── TAB: SỰ KIỆN QUAN TRỌNG (SINH NHẬT, KỶ NIỆM) ── */}
+              {/* ── TAB MỚI: SỰ KIỆN QUAN TRỌNG (SINH NHẬT, KỶ NIỆM) ── */}
               {activeTab === 'special' && (
                 <div className="space-y-6">
                   <form onSubmit={handleAddSpecialEvent} className="bg-gradient-to-br from-pink-50 to-white p-5 rounded-3xl border border-pink-100 shadow-sm flex flex-col gap-4">
@@ -1563,7 +1581,6 @@ const GameRoadmap = ({ user }) => {
                             className="flex-1 md:flex-none px-4 py-2 rounded-xl text-[11px] font-black transition-all hover:scale-105 bg-indigo-50 text-indigo-600 border border-indigo-200 uppercase cursor-pointer">
                             Xem lịch
                           </button>
-                          {/* Nút Hủy Kết Bạn */}
                           <button onClick={() => handleRemoveFriend(friend.uid)}
                             className="flex-1 md:flex-none px-4 py-2 rounded-xl text-[11px] font-black transition-all hover:scale-105 bg-red-50 text-red-500 border border-red-200 uppercase cursor-pointer">
                             Xóa
@@ -1819,7 +1836,7 @@ const GameRoadmap = ({ user }) => {
         </div>
       )}
 
-      {/* CROP MODAL (TÙY CHỈNH TỰ DO) */}
+      {/* CROP MODAL (TÙY CHỈNH TỰ DO HOẶC 21:9) */}
       {isCropModalOpen && upImg && (
         <div className="fixed inset-0 flex flex-col items-center justify-center z-[200] p-4" style={{ background: 'rgba(255,255,255,0.85)', backdropFilter: 'blur(15px)' }}>
           <div className="text-center mb-6">
@@ -1904,6 +1921,7 @@ const GameRoadmap = ({ user }) => {
                             {isDone && <span className="text-emerald-500 text-lg font-black mr-2">✔</span>}
                           </div>
                           
+                          {/* FIREBASE CẢM XÚC */}
                           <div className="flex items-center gap-2 mt-3">
                             {Object.keys(reactionCounts).length > 0 && (
                               <div className="flex gap-1.5 bg-slate-50 px-2 py-1.5 rounded-xl border border-slate-100">
