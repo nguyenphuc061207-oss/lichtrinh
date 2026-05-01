@@ -62,11 +62,11 @@ const GameRoadmap = ({ user }) => {
   const [selectedEventDetail, setSelectedEventDetail] = useState(null); 
   const [isDeadlineModalOpen, setIsDeadlineModalOpen] = useState(false);
 
-  // STATE BẠN BÈ VÀ ID
   const generateID = () => Math.floor(10000000 + Math.random() * 90000000).toString();
   
   const [profile, setProfile] = useState({
-    avatar: "https://images.unsplash.com/photo-1541562232579-512a21360020?q=80&w=800",
+    avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200", // Ảnh vuông mặc định
+    background: "https://images.unsplash.com/photo-1541562232579-512a21360020?q=80&w=800", // Ảnh nền 9:16 mặc định
     title: "TỔNG QUAN PHIÊN BẢN", 
     subtitle: "v7.3",
     displayName: "Nhà Khai Phá",
@@ -74,12 +74,11 @@ const GameRoadmap = ({ user }) => {
   });
   
   const [events, setEvents] = useState([]);
-  const [friendsList, setFriendsList] = useState([]); // Mảng chứa UID bạn bè
+  const [friendsList, setFriendsList] = useState([]); 
   
-  // Các state phục vụ giao diện Bạn Bè
   const [searchFriendId, setSearchFriendId] = useState('');
-  const [friendsData, setFriendsData] = useState([]); // Thông tin chi tiết của bạn bè
-  const [viewingFriendFeed, setViewingFriendFeed] = useState(null); // Khi bấm xem lịch bạn bè
+  const [friendsData, setFriendsData] = useState([]); 
+  const [viewingFriendFeed, setViewingFriendFeed] = useState(null); 
 
   useEffect(() => {
     if (!user) return;
@@ -89,13 +88,16 @@ const GameRoadmap = ({ user }) => {
         const data = docSnap.data();
         let loadedProfile = data.profile || profile;
         
-        // Tự động cấp ID nếu tài khoản cũ chưa có
         if (!loadedProfile.shortId) {
           loadedProfile.shortId = generateID();
           loadedProfile.displayName = loadedProfile.displayName || "Nhà Khai Phá";
-          setDoc(doc(db, "users", user.uid), { profile: loadedProfile }, { merge: true });
         }
         
+        // Hỗ trợ dữ liệu cũ: Nếu tài khoản cũ chưa có background, lấy tạm avatar cũ làm nền
+        if (!loadedProfile.background) {
+          loadedProfile.background = loadedProfile.avatar;
+        }
+
         setProfile(loadedProfile);
 
         if (data.events) {
@@ -103,7 +105,7 @@ const GameRoadmap = ({ user }) => {
             ...ev,
             start: ev.start.toDate ? ev.start.toDate() : new Date(ev.start),
             end: ev.end.toDate ? ev.end.toDate() : new Date(ev.end),
-            isShared: ev.isShared || false // Trạng thái chia sẻ
+            isShared: ev.isShared || false 
           }));
           setEvents(cloudEvents);
         }
@@ -120,7 +122,6 @@ const GameRoadmap = ({ user }) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
-  // Hàm load chi tiết bạn bè mỗi khi friendsList thay đổi
   useEffect(() => {
     const fetchFriendsData = async () => {
       if (friendsList.length === 0) {
@@ -131,7 +132,9 @@ const GameRoadmap = ({ user }) => {
       for (const fUid of friendsList) {
         const fDoc = await getDoc(doc(db, "users", fUid));
         if (fDoc.exists()) {
-          dataArr.push({ uid: fUid, ...fDoc.data().profile });
+          const fProfile = fDoc.data().profile;
+          if(!fProfile.background) fProfile.background = fProfile.avatar; // Fix dữ liệu cũ bạn bè
+          dataArr.push({ uid: fUid, ...fProfile });
         }
       }
       setFriendsData(dataArr);
@@ -177,7 +180,11 @@ const GameRoadmap = ({ user }) => {
     reader.readAsDataURL(blob);
     setCropTarget(target);
     
-    if (target === 'profile') {
+    // TÁCH TỈ LỆ ẢNH THEO TARGET
+    if (target === 'avatar') {
+      setCropAspectRatio(1 / 1); 
+      setCrop({ unit: '%', width: 50, aspect: 1/1 });
+    } else if (target === 'background') {
       setCropAspectRatio(9 / 16); 
       setCrop({ unit: '%', width: 50, aspect: 9/16 });
     } else {
@@ -220,7 +227,8 @@ const GameRoadmap = ({ user }) => {
         if (items[i].type.indexOf('image') !== -1) {
           e.preventDefault(); 
           const blob = items[i].getAsFile();
-          const currentTarget = activeTab === 'profile' ? 'profile' : 'event';
+          // Mặc định tab profile khi bấm Ctrl+V sẽ dán vào ảnh Nền (Background)
+          const currentTarget = activeTab === 'profile' ? 'background' : 'event';
           processImageBlob(blob, currentTarget);
           break;
         }
@@ -249,11 +257,15 @@ const GameRoadmap = ({ user }) => {
 
     const croppedImageUrl = canvas.toDataURL('image/jpeg', 0.8);
 
+    // PHÂN LOẠI TARGET ĐỂ LƯU VÀO ĐÚNG STATE
     if (cropTarget === 'event') {
       setEventFormData({ ...eventFormData, croppedImage: croppedImageUrl });
-    } else if (cropTarget === 'profile') {
+    } else if (cropTarget === 'avatar') {
       setProfileFormData({ ...profileFormData, avatar: croppedImageUrl });
+    } else if (cropTarget === 'background') {
+      setProfileFormData({ ...profileFormData, background: croppedImageUrl });
     }
+    
     setIsCropModalOpen(false);
     setUpImg(null);
   };
@@ -264,9 +276,10 @@ const GameRoadmap = ({ user }) => {
   
   const handleSaveProfile = () => {
     const updatedProfile = {
-      ...profile, // Giữ lại shortId
+      ...profile, 
       displayName: profileFormData.displayName,
       avatar: profileFormData.avatar,
+      background: profileFormData.background, // Lưu thêm background
       title: profileFormData.title.toUpperCase(),
       subtitle: profileFormData.subtitle.toUpperCase()
     };
@@ -303,7 +316,7 @@ const GameRoadmap = ({ user }) => {
       image: eventFormData.croppedImage || "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=200&q=80",
       rewards: eventFormData.rewards,
       trackRow: assignedRow,
-      isShared: false // Mặc định tạo ra chưa chia sẻ
+      isShared: false 
     };
 
     const updatedEvents = [...events, newEvent];
@@ -318,7 +331,6 @@ const GameRoadmap = ({ user }) => {
     saveToCloud(profile, updatedEvents); 
   };
 
-  // Nút Share bật/tắt trong Detail Modal
   const handleToggleShareEvent = (eventId) => {
     const updatedEvents = events.map(ev => {
       if (ev.id === eventId) return { ...ev, isShared: !ev.isShared };
@@ -326,10 +338,9 @@ const GameRoadmap = ({ user }) => {
     });
     setEvents(updatedEvents);
     saveToCloud(profile, updatedEvents);
-    setSelectedEventDetail(updatedEvents.find(e => e.id === eventId)); // Cập nhật lại Modal
+    setSelectedEventDetail(updatedEvents.find(e => e.id === eventId)); 
   };
 
-  // TÌM VÀ THÊM BẠN BÈ
   const handleAddFriend = async (e) => {
     e.preventDefault();
     if (searchFriendId === profile.shortId) {
@@ -359,13 +370,15 @@ const GameRoadmap = ({ user }) => {
     }
   };
 
-  // XEM LỊCH BẠN BÈ
   const handleViewFriendFeed = async (friendUid) => {
     const fDoc = await getDoc(doc(db, "users", friendUid));
     if (fDoc.exists()) {
       const fData = fDoc.data();
+      let fProfile = fData.profile;
+      if(!fProfile.background) fProfile.background = fProfile.avatar;
+
       const sharedEvents = (fData.events || [])
-        .filter(ev => ev.isShared) // Chỉ lấy các sự kiện đã bật chia sẻ
+        .filter(ev => ev.isShared) 
         .map(ev => ({
            ...ev,
            start: ev.start.toDate ? ev.start.toDate() : new Date(ev.start),
@@ -374,10 +387,10 @@ const GameRoadmap = ({ user }) => {
         .sort((a, b) => a.start - b.start);
       
       setViewingFriendFeed({
-        profile: fData.profile,
+        profile: fProfile,
         events: sharedEvents
       });
-      setIsSettingsOpen(false); // Đóng bảng cài đặt để xem
+      setIsSettingsOpen(false); 
     }
   };
 
@@ -409,26 +422,10 @@ const GameRoadmap = ({ user }) => {
             </div>
           </div>
 
-          {/* CÁC NÚT BẤM TRÊN HEADER */}
           <div className="ml-auto relative z-10 mb-1.5 md:mb-2 mr-2 md:mr-4 flex gap-1.5 md:gap-2">
-             <button 
-                onClick={() => setIsDeadlineModalOpen(true)}
-                className="bg-yellow-400 text-yellow-900 font-black px-3 md:px-5 py-1 md:py-1.5 rounded-full shadow-[0_0_10px_rgba(250,204,21,0.6)] hover:scale-105 transition-transform text-[10px] md:text-sm tracking-wide border-2 border-white hover:border-yellow-200 whitespace-nowrap"
-              >
-                ⏰ Deadline
-              </button>
-             <button 
-                onClick={() => { setProfileFormData(profile); setIsSettingsOpen(true); }}
-                className="bg-white text-[#4f46e5] font-black px-3 md:px-5 py-1 md:py-1.5 rounded-full shadow-[0_0_10px_rgba(255,255,255,0.5)] hover:scale-105 transition-transform text-[10px] md:text-sm tracking-wide border-2 border-transparent hover:border-[#38bdf8] whitespace-nowrap"
-              >
-                Cài Đặt
-              </button>
-              <button 
-                onClick={handleLogout}
-                className="bg-red-500 text-white font-black px-3 md:px-4 py-1 md:py-1.5 rounded-full shadow-[0_0_10px_rgba(239,68,68,0.5)] hover:bg-red-400 hover:scale-105 transition-transform text-[10px] md:text-sm tracking-wide border-2 border-transparent whitespace-nowrap"
-              >
-                Thoát
-              </button>
+             <button onClick={() => setIsDeadlineModalOpen(true)} className="bg-yellow-400 text-yellow-900 font-black px-3 md:px-5 py-1 md:py-1.5 rounded-full shadow-[0_0_10px_rgba(250,204,21,0.6)] hover:scale-105 transition-transform text-[10px] md:text-sm tracking-wide border-2 border-white hover:border-yellow-200 whitespace-nowrap">⏰ Deadline</button>
+             <button onClick={() => { setProfileFormData(profile); setIsSettingsOpen(true); }} className="bg-white text-[#4f46e5] font-black px-3 md:px-5 py-1 md:py-1.5 rounded-full shadow-[0_0_10px_rgba(255,255,255,0.5)] hover:scale-105 transition-transform text-[10px] md:text-sm tracking-wide border-2 border-transparent hover:border-[#38bdf8] whitespace-nowrap">Cài Đặt</button>
+             <button onClick={handleLogout} className="bg-red-500 text-white font-black px-3 md:px-4 py-1 md:py-1.5 rounded-full shadow-[0_0_10px_rgba(239,68,68,0.5)] hover:bg-red-400 hover:scale-105 transition-transform text-[10px] md:text-sm tracking-wide border-2 border-transparent whitespace-nowrap">Thoát</button>
           </div>
         </div>
 
@@ -437,18 +434,16 @@ const GameRoadmap = ({ user }) => {
           
           <div className={`w-full h-full md:w-[320px] md:h-full shrink-0 bg-white rounded-lg border-2 border-[#bfdbfe] relative flex-col justify-between z-20 shadow-sm p-2 md:p-3 ${showMobileMap ? 'hidden md:flex' : 'flex'}`}>
             <div className="w-full h-full relative rounded-md border-[3px] border-[#60a5fa] overflow-hidden shadow-[0_0_15px_rgba(96,165,250,0.3)] bg-slate-900 flex flex-col justify-end">
-              <img src={profile.avatar} alt="Avatar" className="absolute inset-0 w-full h-full object-cover object-center opacity-80 md:opacity-100" />
+              {/* Hiển thị background thay vì avatar */}
+              <img src={profile.background} alt="Background" className="absolute inset-0 w-full h-full object-cover object-center opacity-80 md:opacity-100" />
               
-              {/* Tiêu đề góc dưới bên trái */}
               <div className="relative z-10 p-3 bg-gradient-to-t from-black/80 to-transparent text-white">
                 <h2 className="font-black text-lg md:text-xl drop-shadow-md leading-none">{profile.title}</h2>
                 <p className="font-bold text-xs md:text-sm text-cyan-300 drop-shadow-sm">{profile.subtitle}</p>
               </div>
 
               <div className="absolute inset-0 flex md:hidden flex-col items-center justify-center p-4 bg-black/40">
-                 <button onClick={() => setShowMobileMap(true)} className="bg-cyan-500 hover:bg-cyan-400 text-[#0f172a] font-black px-8 py-4 rounded-full border-2 border-white shadow-[0_0_30px_rgba(6,182,212,0.8)] animate-pulse text-lg tracking-wider">
-                    XEM LỊCH TRÌNH
-                 </button>
+                 <button onClick={() => setShowMobileMap(true)} className="bg-cyan-500 hover:bg-cyan-400 text-[#0f172a] font-black px-8 py-4 rounded-full border-2 border-white shadow-[0_0_30px_rgba(6,182,212,0.8)] animate-pulse text-lg tracking-wider">XEM LỊCH TRÌNH</button>
               </div>
             </div>
           </div>
@@ -456,9 +451,7 @@ const GameRoadmap = ({ user }) => {
           <div className={`flex-1 flex-col overflow-x-auto relative custom-scrollbar bg-white rounded-lg border-2 border-[#bfdbfe] shadow-inner ${showMobileMap ? 'flex' : 'hidden md:flex'}`} ref={scrollContainerRef}>
             
             <div className="md:hidden sticky left-0 top-0 z-50 w-full bg-white border-b-2 border-slate-200 p-2 shadow-sm flex justify-center">
-               <button onClick={() => setShowMobileMap(false)} className="bg-slate-700 text-white px-6 py-2 rounded-full font-bold text-xs shadow-md hover:bg-slate-600 uppercase tracking-widest flex items-center gap-2">
-                 <span>⬅</span> QUAY LẠI HÌNH NỀN
-               </button>
+               <button onClick={() => setShowMobileMap(false)} className="bg-slate-700 text-white px-6 py-2 rounded-full font-bold text-xs shadow-md hover:bg-slate-600 uppercase tracking-widest flex items-center gap-2"><span>⬅</span> QUAY LẠI HÌNH NỀN</button>
             </div>
 
             <div className="flex flex-col h-full relative" style={{ minWidth: `${totalDays * 100}px` }}>
@@ -497,9 +490,7 @@ const GameRoadmap = ({ user }) => {
                 
                 {isNowVisible && (
                   <div className="absolute top-0 bottom-0 w-[2px] bg-[#ef4444] z-30 shadow-[0_0_10px_rgba(239,68,68,0.5)]" style={{ left: `${nowOffsetPercent}%` }}>
-                    <div className="absolute top-1 left-2 bg-[#ef4444] text-white text-[9px] md:text-[11px] font-black px-2 md:px-3 py-0.5 md:py-1 rounded shadow-md whitespace-nowrap">
-                      {todayLabel}
-                    </div>
+                    <div className="absolute top-1 left-2 bg-[#ef4444] text-white text-[9px] md:text-[11px] font-black px-2 md:px-3 py-0.5 md:py-1 rounded shadow-md whitespace-nowrap">{todayLabel}</div>
                   </div>
                 )}
 
@@ -567,24 +558,41 @@ const GameRoadmap = ({ user }) => {
               {/* TAB TÀI KHOẢN (GIAO DIỆN & TÊN) */}
               {activeTab === 'profile' && (
                 <div className="space-y-4 md:space-y-6">
-                  <div className="flex gap-4 mb-6 bg-slate-800 p-4 rounded-lg border border-slate-600 items-center">
-                    <img src={profileFormData.avatar} alt="avatar" className="w-16 h-16 rounded-full border-2 border-cyan-400 object-cover" />
-                    <div>
-                      <h3 className="text-white font-black text-lg">{profileFormData.displayName}</h3>
-                      <p className="text-cyan-400 text-xs font-bold font-mono bg-cyan-900/30 px-2 py-0.5 rounded inline-block mt-1">ID: {profileFormData.shortId}</p>
+                  {/* BẢNG PREVIEW */}
+                  <div className="flex gap-4 mb-6 bg-slate-800 p-4 rounded-lg border border-slate-600 items-center relative overflow-hidden">
+                    <img src={profileFormData.background} alt="bg" className="absolute inset-0 w-full h-full object-cover opacity-30" />
+                    <div className="relative z-10 flex gap-4 items-center">
+                      <img src={profileFormData.avatar} alt="avatar" className="w-16 h-16 rounded-full border-2 border-cyan-400 object-cover bg-white" />
+                      <div>
+                        <h3 className="text-white font-black text-lg">{profileFormData.displayName}</h3>
+                        <p className="text-cyan-400 text-xs font-bold font-mono bg-cyan-900/30 px-2 py-0.5 rounded inline-block mt-1">ID: {profileFormData.shortId}</p>
+                      </div>
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                      <div><label className="text-cyan-400 text-[10px] md:text-xs font-bold block mb-1 md:mb-2 uppercase">Tên hiển thị (Tự đặt):</label><input type="text" className="w-full bg-[#0f172a] text-white border border-slate-600 rounded p-2 md:p-3 text-sm focus:outline-none focus:border-cyan-400" value={profileFormData.displayName} onChange={e => setProfileFormData({...profileFormData, displayName: e.target.value})} /></div>
+                     
+                     {/* CỘT NHẬP ẢNH ĐẠI DIỆN */}
                      <div>
-                       <label className="text-cyan-400 text-[10px] md:text-xs font-bold block mb-1 md:mb-2 uppercase">Ảnh Đại Diện / Nền:</label>
+                       <label className="text-cyan-400 text-[10px] md:text-xs font-bold block mb-1 md:mb-2 uppercase">Ảnh Đại Diện (Vuông 1:1):</label>
                        <div className="flex gap-2 items-center">
-                         <input type="file" accept="image/*" onChange={(e) => onSelectFile(e, 'profile')} className="text-xs md:text-sm text-slate-300 w-full file:mr-2 file:py-1.5 file:px-3 file:rounded file:border-0 file:font-bold file:bg-[#3b82f6] file:text-white cursor-pointer" />
-                         <button type="button" onClick={() => handlePasteButtonClick('profile')} className="shrink-0 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded font-bold text-xs shadow-[0_0_10px_rgba(79,70,229,0.5)] border border-indigo-400 transition-colors flex items-center gap-1" title="Dán ảnh đã copy">📋 Dán</button>
+                         <input type="file" accept="image/*" onChange={(e) => onSelectFile(e, 'avatar')} className="text-xs md:text-sm text-slate-300 w-full file:mr-2 file:py-1.5 file:px-3 file:rounded file:border-0 file:font-bold file:bg-[#3b82f6] file:text-white cursor-pointer" />
+                         <button type="button" onClick={() => handlePasteButtonClick('avatar')} className="shrink-0 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded font-bold text-xs shadow-[0_0_10px_rgba(79,70,229,0.5)] border border-indigo-400 transition-colors flex items-center gap-1" title="Dán ảnh đã copy">📋 Dán</button>
                        </div>
                      </div>
+
                      <div><label className="text-slate-400 text-[10px] md:text-xs font-bold block mb-1 md:mb-2 uppercase">Tiêu đề lớn:</label><input type="text" className="w-full bg-[#0f172a] text-white border border-slate-600 rounded p-2 md:p-3 text-sm focus:outline-none focus:border-cyan-400" value={profileFormData.title} onChange={e => setProfileFormData({...profileFormData, title: e.target.value})} /></div>
+                     
+                     {/* CỘT NHẬP ẢNH NỀN */}
+                     <div>
+                       <label className="text-cyan-400 text-[10px] md:text-xs font-bold block mb-1 md:mb-2 uppercase">Ảnh Nền (Khung 9:16):</label>
+                       <div className="flex gap-2 items-center">
+                         <input type="file" accept="image/*" onChange={(e) => onSelectFile(e, 'background')} className="text-xs md:text-sm text-slate-300 w-full file:mr-2 file:py-1.5 file:px-3 file:rounded file:border-0 file:font-bold file:bg-[#3b82f6] file:text-white cursor-pointer" />
+                         <button type="button" onClick={() => handlePasteButtonClick('background')} className="shrink-0 bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-1.5 rounded font-bold text-xs shadow-[0_0_10px_rgba(79,70,229,0.5)] border border-indigo-400 transition-colors flex items-center gap-1" title="Dán ảnh đã copy">📋 Dán</button>
+                       </div>
+                     </div>
+
                      <div><label className="text-slate-400 text-[10px] md:text-xs font-bold block mb-1 md:mb-2 uppercase">Tiêu đề phụ:</label><input type="text" className="w-full bg-[#0f172a] text-white border border-slate-600 rounded p-2 md:p-3 text-sm focus:outline-none focus:border-cyan-400" value={profileFormData.subtitle} onChange={e => setProfileFormData({...profileFormData, subtitle: e.target.value})} /></div>
                   </div>
 
@@ -658,7 +666,7 @@ const GameRoadmap = ({ user }) => {
                         {friendsData.length === 0 && <p className="text-slate-400 text-sm italic col-span-2">Chưa có bạn bè nào. Gửi ID của bạn cho bạn bè để kết nối nhé!</p>}
                         {friendsData.map(friend => (
                            <div key={friend.uid} className="bg-[#0f172a] border border-slate-600 rounded-lg p-3 flex items-center gap-3">
-                              <img src={friend.avatar} alt="f-avatar" className="w-12 h-12 rounded-full border border-slate-500 object-cover" />
+                              <img src={friend.avatar} alt="f-avatar" className="w-12 h-12 rounded-full border border-slate-500 object-cover bg-white" />
                               <div className="flex-1 min-w-0">
                                  <h4 className="text-white font-bold text-sm truncate">{friend.displayName}</h4>
                                  <span className="text-slate-400 text-[10px] font-mono">ID: {friend.shortId}</span>
@@ -736,7 +744,6 @@ const GameRoadmap = ({ user }) => {
                 )}
               </div>
 
-              {/* NÚT CHIA SẺ LÊN DÒNG THỜI GIAN BẠN BÈ */}
               <button 
                 onClick={() => handleToggleShareEvent(selectedEventDetail.id)} 
                 className={`w-full py-3 rounded-xl font-black uppercase tracking-widest transition-all shadow-md flex items-center justify-center gap-2 border-2 ${selectedEventDetail.isShared ? 'bg-white text-pink-500 border-pink-200 hover:border-pink-500' : 'bg-pink-500 text-white border-pink-500 hover:bg-pink-400'}`}
@@ -750,15 +757,60 @@ const GameRoadmap = ({ user }) => {
       )}
 
       {/* ========================================== */}
+      {/* MODAL SỰ KIỆN SẮP HẾT HẠN (DEADLINE <= 3 NGÀY) */}
+      {/* ========================================== */}
+      {isDeadlineModalOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[110] p-4 backdrop-blur-sm" onClick={() => setIsDeadlineModalOpen(false)}>
+          <div className="bg-white border-4 border-red-400 rounded-2xl w-full max-w-[400px] max-h-[80vh] flex flex-col shadow-[0_0_30px_rgba(248,113,113,0.5)] animate-[fadeIn_0.2s_ease-out]" onClick={e => e.stopPropagation()}>
+            <div className="bg-red-500 p-3 text-center rounded-t-lg relative">
+              <h2 className="text-white font-black text-lg drop-shadow-md">🚨 BÁO ĐỘNG DEADLINE</h2>
+              <button onClick={() => setIsDeadlineModalOpen(false)} className="absolute top-1/2 -translate-y-1/2 right-3 w-7 h-7 bg-white hover:bg-slate-200 text-red-600 rounded-full font-black flex items-center justify-center transition-colors shadow-sm">✕</button>
+            </div>
+            <div className="p-4 overflow-y-auto custom-scrollbar flex-1 space-y-3">
+              {(() => {
+                const urgentEvents = events.filter(ev => {
+                  const daysLeft = Math.ceil((ev.end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                  return daysLeft >= 0 && daysLeft <= 3;
+                });
+
+                if (urgentEvents.length === 0) {
+                  return (
+                    <div className="text-center py-8">
+                      <p className="text-4xl mb-2">☕</p>
+                      <p className="text-slate-500 font-bold text-sm">Chưa có deadline nào trong 3 ngày tới!<br/>Cứ thong thả chill nhé!</p>
+                    </div>
+                  );
+                }
+
+                return urgentEvents.sort((a, b) => a.end - b.end).map(ev => {
+                    const daysLeft = Math.ceil((ev.end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+                    return (
+                      <div key={ev.id} className="border-2 border-red-200 bg-red-50 rounded-xl p-3 flex gap-3 hover:border-red-500 hover:bg-red-100 cursor-pointer transition-colors" onClick={() => { setIsDeadlineModalOpen(false); setSelectedEventDetail(ev); }}>
+                         <img src={ev.image} className="w-12 h-12 rounded-lg object-cover shadow-sm" alt="thumb"/>
+                         <div className="flex-1">
+                           <h4 className="font-bold text-slate-800 text-sm leading-tight mb-1">{ev.title}</h4>
+                           <span className="text-[10px] font-black bg-red-500 text-white px-2 py-0.5 rounded shadow-sm animate-pulse">
+                             {daysLeft === 0 ? 'HẾT HẠN HÔM NAY 🔥' : `CÒN ĐÚNG ${daysLeft} NGÀY ⏳`}
+                           </span>
+                         </div>
+                      </div>
+                    )
+                  });
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================== */}
       {/* MODAL XEM DÒNG THỜI GIAN CỦA BẠN BÈ */}
       {/* ========================================== */}
       {viewingFriendFeed && (
         <div className="fixed inset-0 bg-[#0f172a]/95 flex items-center justify-center z-[130] p-4 backdrop-blur-md" onClick={() => setViewingFriendFeed(null)}>
           <div className="w-full max-w-[600px] h-[90vh] bg-white rounded-3xl flex flex-col shadow-[0_0_50px_rgba(236,72,153,0.3)] border-[4px] border-pink-300 overflow-hidden relative animate-[fadeIn_0.2s_ease-out]" onClick={e => e.stopPropagation()}>
             
-            {/* Header thông tin bạn bè */}
             <div className="relative h-48 bg-pink-100 flex-shrink-0">
-               <img src={viewingFriendFeed.profile.avatar} alt="cover" className="absolute inset-0 w-full h-full object-cover opacity-50 blur-sm" />
+               <img src={viewingFriendFeed.profile.background} alt="cover" className="absolute inset-0 w-full h-full object-cover opacity-50 blur-sm" />
                <div className="absolute inset-0 bg-gradient-to-t from-pink-500/90 to-transparent"></div>
                <button onClick={() => setViewingFriendFeed(null)} className="absolute top-4 right-4 w-10 h-10 bg-white/30 hover:bg-white text-white hover:text-pink-600 rounded-full flex items-center justify-center font-black shadow-lg backdrop-blur-sm transition-all z-20">✕</button>
                
@@ -771,7 +823,6 @@ const GameRoadmap = ({ user }) => {
                </div>
             </div>
 
-            {/* Dòng sự kiện (Feed) */}
             <div className="flex-1 overflow-y-auto bg-slate-50 pt-16 px-4 pb-6 custom-scrollbar space-y-4">
                {viewingFriendFeed.events.length === 0 ? (
                  <div className="text-center py-10">
@@ -782,10 +833,8 @@ const GameRoadmap = ({ user }) => {
                  <div className="relative border-l-4 border-pink-200 ml-4 space-y-6">
                     {viewingFriendFeed.events.map(ev => (
                       <div key={ev.id} className="relative pl-6">
-                         {/* Dấu chấm Timeline */}
                          <div className="absolute -left-[14px] top-4 w-6 h-6 bg-pink-500 rounded-full border-4 border-white shadow-sm flex items-center justify-center"></div>
                          
-                         {/* Card Sự Kiện */}
                          <div className="bg-white border-2 border-pink-100 rounded-2xl p-3 shadow-sm hover:shadow-md transition-shadow">
                             <div className="text-xs font-bold text-pink-500 bg-pink-50 inline-block px-2 py-1 rounded-md mb-2">{ev.dateStr}</div>
                             <h4 className="font-black text-slate-800 text-base mb-3 leading-tight">{ev.title}</h4>
