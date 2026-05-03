@@ -1,9 +1,10 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import ReactCrop from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
-import { db, auth } from './firebase';
+import { db, auth, messaging, requestNotificationPermission } from './firebase';
 import { doc, setDoc, getDoc, onSnapshot, collection, query, where, getDocs } from "firebase/firestore";
 import { signOut } from "firebase/auth";
+import { onMessage } from "firebase/messaging";
 
 // ============================================================
 // CẤU HÌNH DANH MỤC & MÀU SẮC
@@ -141,6 +142,26 @@ const GameRoadmap = ({ user }) => {
 
   useEffect(() => {
     if (!user) return;
+
+    let unsubscribeOnMessage = null;
+
+    // Yêu cầu quyền và lưu FCM Token
+    const setupFCM = async () => {
+      const token = await requestNotificationPermission();
+      if (token) {
+        setDoc(doc(db, "users", user.uid), { fcmToken: token }, { merge: true });
+      }
+    };
+    setupFCM();
+
+    // Lắng nghe thông báo ở Foreground
+    unsubscribeOnMessage = onMessage(messaging, (payload) => {
+      console.log('Nhận thông báo ở foreground:', payload);
+      const title = payload.notification?.title || "Thông báo";
+      const body = payload.notification?.body || "Bạn có tin nhắn mới";
+      alert(`${title}\n${body}`);
+    });
+
     const unsub = onSnapshot(doc(db, "users", user.uid), (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
@@ -199,7 +220,10 @@ const GameRoadmap = ({ user }) => {
       }
       setIsLoading(false);
     });
-    return () => unsub();
+    return () => {
+      unsub();
+      if (unsubscribeOnMessage) unsubscribeOnMessage();
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
