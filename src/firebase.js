@@ -26,8 +26,20 @@ export const requestNotificationPermission = async () => {
   try {
     const permission = await Notification.requestPermission();
     if (permission === "granted") {
+      // Đăng ký Service Worker thủ công để đảm bảo Firebase tìm thấy file
+      let swRegistration = null;
+      if ('serviceWorker' in navigator) {
+        try {
+          swRegistration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+          console.log('Service Worker đăng ký thành công');
+        } catch (err) {
+          console.error('Lỗi đăng ký Service Worker:', err);
+        }
+      }
+
       const token = await getToken(messaging, {
-        vapidKey: "BMndSZhDItqO58Y_g03WgEyJHkbO1qPB5V0bysp0FVHGKIzlsYP9QO7xLVqQIn6HNdSKwZKbTjMdAgAfALFZGUw"
+        vapidKey: "BMndSZhDItqO58Y_g03WgEyJHkbO1qPB5V0bysp0FVHGKIzlsYP9QO7xLVqQIn6HNdSKwZKbTjMdAgAfALFZGUw",
+        serviceWorkerRegistration: swRegistration
       });
       if (token) {
         console.log("FCM Token:", token);
