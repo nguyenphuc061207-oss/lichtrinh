@@ -10,31 +10,31 @@ import { onMessage } from "firebase/messaging";
 // CẤU HÌNH DANH MỤC & MÀU SẮC
 // ============================================================
 const CATEGORIES = [
-  { id: 'study',   icon: '📚', label: 'Học tập',   color: '#3b82f6', bg: '#eff6ff', border: '#bfdbfe', text: '#1d4ed8' },
-  { id: 'work',    icon: '💼', label: 'Công việc', color: '#8b5cf6', bg: '#f5f3ff', border: '#ddd6fe', text: '#6d28d9' },
-  { id: 'goal',    icon: '🎯', label: 'Mục tiêu',  color: '#10b981', bg: '#ecfdf5', border: '#a7f3d0', text: '#065f46' },
-  { id: 'event',   icon: '🎉', label: 'Sự kiện',   color: '#f59e0b', bg: '#fffbeb', border: '#fde68a', text: '#92400e' },
-  { id: 'health',  icon: '💪', label: 'Sức khoẻ',  color: '#ef4444', bg: '#fef2f2', border: '#fecaca', text: '#991b1b' },
-  { id: 'other',   icon: '✨', label: 'Khác',      color: '#ec4899', bg: '#fdf2f8', border: '#fbcfe8', text: '#be185d' },
+  { id: 'study', icon: '📚', label: 'Học tập', color: '#3b82f6', bg: '#eff6ff', border: '#bfdbfe', text: '#1d4ed8' },
+  { id: 'work', icon: '💼', label: 'Công việc', color: '#8b5cf6', bg: '#f5f3ff', border: '#ddd6fe', text: '#6d28d9' },
+  { id: 'goal', icon: '🎯', label: 'Mục tiêu', color: '#10b981', bg: '#ecfdf5', border: '#a7f3d0', text: '#065f46' },
+  { id: 'event', icon: '🎉', label: 'Sự kiện', color: '#f59e0b', bg: '#fffbeb', border: '#fde68a', text: '#92400e' },
+  { id: 'health', icon: '💪', label: 'Sức khoẻ', color: '#ef4444', bg: '#fef2f2', border: '#fecaca', text: '#991b1b' },
+  { id: 'other', icon: '✨', label: 'Khác', color: '#ec4899', bg: '#fdf2f8', border: '#fbcfe8', text: '#be185d' },
 ];
 
 const STATUSES = [
-  { id: 'todo',        label: 'Chưa bắt đầu',  icon: '⬜', accent: '#94a3b8' },
-  { id: 'in-progress', label: 'Đang thực hiện', icon: '⏳', accent: '#ec4899' }, 
-  { id: 'done',        label: 'Hoàn thành',    icon: '✅', accent: '#10b981' },
+  { id: 'todo', label: 'Chưa bắt đầu', icon: '⬜', accent: '#94a3b8' },
+  { id: 'in-progress', label: 'Đang thực hiện', icon: '⏳', accent: '#ec4899' },
+  { id: 'done', label: 'Hoàn thành', icon: '✅', accent: '#10b981' },
 ];
 
 const PRIORITIES = [
-  { id: 'low',    label: 'Thấp',   icon: '🟢' },
-  { id: 'medium', label: 'Vừa',    icon: '🟡' },
-  { id: 'high',   label: 'Cao',    icon: '🔴' },
+  { id: 'low', label: 'Thấp', icon: '🟢' },
+  { id: 'medium', label: 'Vừa', icon: '🟡' },
+  { id: 'high', label: 'Cao', icon: '🔴' },
 ];
 
 const REACTIONS = ['👍', '❤️', '😂', '🔥', '👏'];
 
-const getCat  = (id) => CATEGORIES.find(c => c.id === id) || CATEGORIES[5];
-const getStat = (id) => STATUSES.find(s => s.id === id)   || STATUSES[0];
-const getPri  = (id) => PRIORITIES.find(p => p.id === id) || PRIORITIES[1];
+const getCat = (id) => CATEGORIES.find(c => c.id === id) || CATEGORIES[5];
+const getStat = (id) => STATUSES.find(s => s.id === id) || STATUSES[0];
+const getPri = (id) => PRIORITIES.find(p => p.id === id) || PRIORITIES[1];
 
 // ============================================================
 // HELPERS
@@ -54,11 +54,11 @@ const GameRoadmap = ({ user }) => {
   // ── 1. THỜI GIAN ──────────────────────────────────────────
   const now = new Date();
   const currentYear = now.getFullYear();
-  const startDate   = new Date(currentYear - 1, 0, 1);
-  const endDate     = new Date(currentYear + 1, 11, 31, 23, 59, 59);
+  const startDate = new Date(currentYear - 1, 0, 1);
+  const endDate = new Date(currentYear + 1, 11, 31, 23, 59, 59);
   const totalDuration = endDate.getTime() - startDate.getTime();
-  const totalDays     = Math.round(totalDuration / (1000 * 60 * 60 * 24));
-  const daysArray     = Array.from({ length: totalDays + 1 }, (_, i) => new Date(startDate.getTime() + i * 86400000));
+  const totalDays = Math.round(totalDuration / (1000 * 60 * 60 * 24));
+  const daysArray = Array.from({ length: totalDays + 1 }, (_, i) => new Date(startDate.getTime() + i * 86400000));
 
   const yearsData = []; const monthsData = [];
   let tempYear = -1; let tempMonthStr = "";
@@ -70,61 +70,61 @@ const GameRoadmap = ({ user }) => {
     else monthsData[monthsData.length - 1].count++;
   });
 
-  const isNowVisible       = now >= startDate && now <= endDate;
-  const nowOffsetPercent   = ((now.getTime() - startDate.getTime()) / totalDuration) * 100;
+  const isNowVisible = now >= startDate && now <= endDate;
+  const nowOffsetPercent = ((now.getTime() - startDate.getTime()) / totalDuration) * 100;
   const scrollContainerRef = useRef(null);
-  const [zoomLevel, setZoomLevel]   = useState(1);      
+  const [zoomLevel, setZoomLevel] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterCat, setFilterCat]   = useState('all');
+  const [filterCat, setFilterCat] = useState('all');
   const [filterStat, setFilterStat] = useState('all');
 
   const dayWidth = Math.max(20, 100 * zoomLevel);
 
   useEffect(() => {
     if (scrollContainerRef.current && isNowVisible) {
-      const containerWidth    = scrollContainerRef.current.clientWidth;
-      const totalScrollWidth  = scrollContainerRef.current.scrollWidth;
-      const scrollToX         = (nowOffsetPercent / 100) * totalScrollWidth - containerWidth / 2;
+      const containerWidth = scrollContainerRef.current.clientWidth;
+      const totalScrollWidth = scrollContainerRef.current.scrollWidth;
+      const scrollToX = (nowOffsetPercent / 100) * totalScrollWidth - containerWidth / 2;
       scrollContainerRef.current.scrollLeft = scrollToX;
     }
   }, [nowOffsetPercent, isNowVisible, zoomLevel]);
 
-  const todayLabel = `HÔM NAY (${now.getDate().toString().padStart(2,'0')}/${(now.getMonth()+1).toString().padStart(2,'0')})`;
+  const todayLabel = `HÔM NAY (${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')})`;
 
   // ── 2. STATE & FIRESTORE ───────────────────────────────────
-  const [showMobileMap,       setShowMobileMap]       = useState(false);
+  const [showMobileMap, setShowMobileMap] = useState(false);
   const [selectedEventDetail, setSelectedEventDetail] = useState(null);
-  const [isDailyModalOpen,    setIsDailyModalOpen]    = useState(false);
-  const [quickViewDate,       setQuickViewDate]       = useState(todayYMD);
+  const [isDailyModalOpen, setIsDailyModalOpen] = useState(false);
+  const [quickViewDate, setQuickViewDate] = useState(todayYMD);
   const [isDeadlineModalOpen, setIsDeadlineModalOpen] = useState(false);
-  const [targetScrollId,      setTargetScrollId]      = useState(null);
+  const [targetScrollId, setTargetScrollId] = useState(null);
 
   const generateID = () => Math.floor(10000000 + Math.random() * 90000000).toString();
 
   const [profile, setProfile] = useState({
-    avatar:      "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200",
-    background:  "https://images.unsplash.com/photo-1541562232579-512a21360020?q=80&w=800",
-    title:       "TỔNG QUAN LỊCH TRÌNH",
-    subtitle:    "v10.6",
+    avatar: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?q=80&w=200",
+    background: "https://images.unsplash.com/photo-1541562232579-512a21360020?q=80&w=800",
+    title: "TỔNG QUAN LỊCH TRÌNH",
+    subtitle: "v10.6",
     displayName: "Người dùng mới",
-    shortId:     "........",
-    bio:         "",
+    shortId: "........",
+    bio: "",
   });
 
-  const [events,        setEvents]        = useState([]);
+  const [events, setEvents] = useState([]);
   const [dailySchedule, setDailySchedule] = useState([]);
   const [specialEvents, setSpecialEvents] = useState([]);
-  const [friendsList,   setFriendsList]   = useState([]);
-  const [friendsData,   setFriendsData]   = useState([]);
+  const [friendsList, setFriendsList] = useState([]);
+  const [friendsData, setFriendsData] = useState([]);
   const [notifications, setNotifications] = useState([]);
-  const [isNotifOpen,   setIsNotifOpen]   = useState(false);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
 
-  const [searchFriendId,    setSearchFriendId]    = useState('');
+  const [searchFriendId, setSearchFriendId] = useState('');
   const [viewingFriendFeed, setViewingFriendFeed] = useState(null);
-  const [commentInputs,     setCommentInputs]     = useState({});
-  const [replyingTo,        setReplyingTo]        = useState({}); 
-  const [activeReactionId,  setActiveReactionId]  = useState(null); // Giải quyết triệt để lỗi thả cảm xúc trên mobile
-  const [isLoading,         setIsLoading]         = useState(true);
+  const [commentInputs, setCommentInputs] = useState({});
+  const [replyingTo, setReplyingTo] = useState({});
+  const [activeReactionId, setActiveReactionId] = useState(null); // Giải quyết triệt để lỗi thả cảm xúc trên mobile
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (viewingFriendFeed && targetScrollId) {
@@ -169,27 +169,27 @@ const GameRoadmap = ({ user }) => {
         let needsSave = false;
         if (!loadedProfile.shortId || loadedProfile.shortId === "........") { loadedProfile.shortId = generateID(); needsSave = true; }
         if (!loadedProfile.displayName) { loadedProfile.displayName = "Người dùng mới"; needsSave = true; }
-        if (!loadedProfile.background)  { loadedProfile.background  = loadedProfile.avatar || profile.background; needsSave = true; }
+        if (!loadedProfile.background) { loadedProfile.background = loadedProfile.avatar || profile.background; needsSave = true; }
         setProfile(loadedProfile);
-        
+
         if (needsSave) setDoc(doc(db, "users", user.uid), { profile: loadedProfile }, { merge: true });
-        
+
         if (Array.isArray(data.events)) {
           setEvents(data.events.map(ev => ({
             ...ev,
-            start:    ev.start && ev.start.toDate ? ev.start.toDate() : new Date(ev.start || Date.now()),
-            end:      ev.end && ev.end.toDate   ? ev.end.toDate()   : new Date(ev.end || Date.now()),
+            start: ev.start && ev.start.toDate ? ev.start.toDate() : new Date(ev.start || Date.now()),
+            end: ev.end && ev.end.toDate ? ev.end.toDate() : new Date(ev.end || Date.now()),
             isShared: ev.isShared || false,
             category: ev.category || 'other',
-            status:   ev.status   || 'todo',
+            status: ev.status || 'todo',
             priority: ev.priority || 'medium',
             progress: ev.progress ?? 0,
-            notes:    ev.notes    || '',
+            notes: ev.notes || '',
             reactions: ev.reactions || {},
             comments: Array.isArray(ev.comments) ? ev.comments : []
           })));
         } else setEvents([]);
-        
+
         if (Array.isArray(data.dailySchedule)) {
           setDailySchedule(data.dailySchedule.map(t => ({
             ...t,
@@ -207,10 +207,10 @@ const GameRoadmap = ({ user }) => {
 
         if (Array.isArray(data.specialEvents)) setSpecialEvents(data.specialEvents); else setSpecialEvents([]);
         if (Array.isArray(data.friends)) setFriendsList(data.friends); else setFriendsList([]);
-        
+
         if (Array.isArray(data.notifications)) {
-            const validNotifs = data.notifications.filter(n => n && n.id);
-            setNotifications(validNotifs.sort((a,b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)));
+          const validNotifs = data.notifications.filter(n => n && n.id);
+          setNotifications(validNotifs.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)));
         } else setNotifications([]);
 
       } else {
@@ -224,7 +224,7 @@ const GameRoadmap = ({ user }) => {
       unsub();
       if (unsubscribeOnMessage) unsubscribeOnMessage();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   useEffect(() => {
@@ -247,9 +247,9 @@ const GameRoadmap = ({ user }) => {
   const saveToCloud = async (newProfile, newEvents = events, newFriends = friendsList, newDaily = dailySchedule, newNotifs = notifications, newSpecials = specialEvents) => {
     if (!user) return;
     try {
-      await setDoc(doc(db, "users", user.uid), { 
-        profile: newProfile, 
-        events: newEvents, 
+      await setDoc(doc(db, "users", user.uid), {
+        profile: newProfile,
+        events: newEvents,
         friends: newFriends,
         dailySchedule: newDaily,
         notifications: newNotifs,
@@ -260,31 +260,46 @@ const GameRoadmap = ({ user }) => {
 
   // ── 3. FILTERED EVENTS ─────────────────────────────────────
   const filteredEvents = useMemo(() => events.filter(ev => {
-    const matchCat   = filterCat  === 'all' || ev.category === filterCat;
-    const matchStat  = filterStat === 'all' || ev.status   === filterStat;
+    const matchCat = filterCat === 'all' || ev.category === filterCat;
+    const matchStat = filterStat === 'all' || ev.status === filterStat;
     const matchSearch = !searchQuery || (ev.title || "").toLowerCase().includes(searchQuery.toLowerCase());
     return matchCat && matchStat && matchSearch;
   }), [events, filterCat, filterStat, searchQuery]);
 
   // ── 4. DAILY SCHEDULE LOGIC ────────────────────────────────
   const checkTaskOnDate = (task, targetDateStr) => {
-    if (!task || !task.startDate) return false; 
-    const start = new Date(task.startDate); start.setHours(0,0,0,0);
-    const target = new Date(targetDateStr); target.setHours(0,0,0,0);
-    
+    if (!task || !task.startDate) return false;
+    const start = new Date(task.startDate); start.setHours(0, 0, 0, 0);
+    const target = new Date(targetDateStr); target.setHours(0, 0, 0, 0);
+
     if (isNaN(start.getTime()) || isNaN(target.getTime())) return false;
-    if (target < start) return false; 
+    if (target < start) return false;
 
     const diffTime = Math.abs(target - start);
     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
 
-    if (task.repeat === 'none')     return diffDays === 0;
-    if (task.repeat === 'daily')    return true;
-    if (task.repeat === 'weekly')   return diffDays % 7 === 0;
+    if (task.repeat === 'none') return diffDays === 0;
+    if (task.repeat === 'daily') return true;
+    if (task.repeat === 'weekly') return diffDays % 7 === 0;
     if (task.repeat === 'biweekly') return diffDays % 14 === 0;
-    if (task.repeat === 'yearly')   return start.getDate() === target.getDate() && start.getMonth() === target.getMonth();
-    if (task.repeat === 'custom')   return diffDays % (task.customDays || 1) === 0;
-    
+    if (task.repeat === 'monthly') return start.getDate() === target.getDate();
+    if (task.repeat === 'yearly') return start.getDate() === target.getDate() && start.getMonth() === target.getMonth();
+    if (task.repeat === 'custom') {
+      const interval = Number(task.customInterval) || Number(task.customDays) || 1;
+      const unit = task.customUnit || 'days';
+      if (unit === 'days') return diffDays % interval === 0;
+      if (unit === 'weeks') return diffDays % (interval * 7) === 0;
+      if (unit === 'months') {
+        const mDiff = (target.getFullYear() - start.getFullYear()) * 12 + (target.getMonth() - start.getMonth());
+        return mDiff >= 0 && mDiff % interval === 0 && start.getDate() === target.getDate();
+      }
+      if (unit === 'years') {
+        const yDiff = target.getFullYear() - start.getFullYear();
+        return yDiff >= 0 && yDiff % interval === 0 && start.getMonth() === target.getMonth() && start.getDate() === target.getDate();
+      }
+      return diffDays % interval === 0;
+    }
+
     return false;
   };
 
@@ -297,70 +312,178 @@ const GameRoadmap = ({ user }) => {
   const quickViewSchedule = useMemo(() => {
     return dailySchedule
       .filter(t => checkTaskOnDate(t, quickViewDate))
-      .sort((a, b) => (a.time || "00:00").localeCompare(b.time || "00:00")); 
+      .sort((a, b) => (a.time || "00:00").localeCompare(b.time || "00:00"));
   }, [dailySchedule, quickViewDate]);
 
   // ── SIDEBAR SPECIAL EVENTS LOGIC ──
+  const getNextOccurrence = (ev, today) => {
+    const d = new Date(ev.date);
+    if (isNaN(d.getTime())) return null;
+    const r = ev.repeat || 'none';
+
+    if (r === 'none') return d >= today ? d : null;
+
+    if (r === 'daily') {
+      return new Date(today);
+    }
+
+    if (r === 'weekly') {
+      const candidate = new Date(today);
+      const dayDiff = (d.getDay() - today.getDay() + 7) % 7;
+      candidate.setDate(today.getDate() + (dayDiff === 0 ? 0 : dayDiff));
+      if (candidate < today) candidate.setDate(candidate.getDate() + 7);
+      return candidate;
+    }
+
+    if (r === 'biweekly') {
+      const diffDays = Math.floor((today.getTime() - d.getTime()) / 86400000);
+      const rem = ((diffDays % 14) + 14) % 14;
+      const candidate = new Date(today);
+      if (rem === 0) return candidate;
+      candidate.setDate(today.getDate() + (14 - rem));
+      return candidate;
+    }
+
+    if (r === 'monthly') {
+      const candidate = new Date(today.getFullYear(), today.getMonth(), d.getDate());
+      if (candidate < today) candidate.setMonth(candidate.getMonth() + 1);
+      return candidate;
+    }
+
+    if (r === 'yearly') {
+      const candidate = new Date(today.getFullYear(), d.getMonth(), d.getDate());
+      if (candidate < today && !(candidate.getMonth() === today.getMonth() && candidate.getDate() === today.getDate())) {
+        candidate.setFullYear(today.getFullYear() + 1);
+      }
+      return candidate;
+    }
+
+    if (r === 'custom') {
+      const interval = Number(ev.customInterval) || 1;
+      const unit = ev.customUnit || 'days';
+      if (unit === 'days') {
+        const diffDays = Math.floor((today.getTime() - d.getTime()) / 86400000);
+        if (diffDays < 0) return d;
+        const rem = diffDays % interval;
+        const candidate = new Date(today);
+        if (rem === 0) return candidate;
+        candidate.setDate(today.getDate() + (interval - rem));
+        return candidate;
+      }
+      if (unit === 'weeks') {
+        const totalDays = interval * 7;
+        const diffDays = Math.floor((today.getTime() - d.getTime()) / 86400000);
+        if (diffDays < 0) return d;
+        const rem = diffDays % totalDays;
+        const candidate = new Date(today);
+        if (rem === 0) return candidate;
+        candidate.setDate(today.getDate() + (totalDays - rem));
+        return candidate;
+      }
+      if (unit === 'months') {
+        const candidate = new Date(d);
+        while (candidate < today) candidate.setMonth(candidate.getMonth() + interval);
+        return candidate;
+      }
+      if (unit === 'years') {
+        const candidate = new Date(d);
+        while (candidate < today) candidate.setFullYear(candidate.getFullYear() + interval);
+        return candidate;
+      }
+    }
+
+    return null;
+  };
+
+  const isSpecialToday = (ev, today) => {
+    const d = new Date(ev.date);
+    if (isNaN(d.getTime())) return false;
+    const r = ev.repeat || 'none';
+    const tMonth = today.getMonth();
+    const tDay = today.getDate();
+
+    if (r === 'none') return d.getFullYear() === today.getFullYear() && d.getMonth() === tMonth && d.getDate() === tDay;
+    if (r === 'daily') return true;
+    if (r === 'weekly') return d.getDay() === today.getDay();
+    if (r === 'biweekly') {
+      const diffDays = Math.floor((today.getTime() - d.getTime()) / 86400000);
+      return diffDays >= 0 && diffDays % 14 === 0;
+    }
+    if (r === 'monthly') return d.getDate() === tDay;
+    if (r === 'yearly') return d.getMonth() === tMonth && d.getDate() === tDay;
+    if (r === 'custom') {
+      const interval = Number(ev.customInterval) || 1;
+      const unit = ev.customUnit || 'days';
+      const diffDays = Math.floor((today.getTime() - d.getTime()) / 86400000);
+      if (diffDays < 0) return false;
+      if (unit === 'days') return diffDays % interval === 0;
+      if (unit === 'weeks') return diffDays % (interval * 7) === 0;
+      if (unit === 'months') {
+        const mDiff = (today.getFullYear() - d.getFullYear()) * 12 + (tMonth - d.getMonth());
+        return mDiff >= 0 && mDiff % interval === 0 && d.getDate() === tDay;
+      }
+      if (unit === 'years') {
+        const yDiff = today.getFullYear() - d.getFullYear();
+        return yDiff >= 0 && yDiff % interval === 0 && d.getMonth() === tMonth && d.getDate() === tDay;
+      }
+    }
+    return false;
+  };
+
   const { todaySpecials, nextSpecial } = useMemo(() => {
     const td = new Date();
-    const tMonth = td.getMonth() + 1;
-    const tDay = td.getDate();
+    td.setHours(0, 0, 0, 0);
 
     const todayList = [];
     let nextEvt = null;
     let minDiff = Infinity;
 
     specialEvents.forEach(ev => {
-        if(!ev.date) return;
-        const d = new Date(ev.date);
-        if(isNaN(d.getTime())) return;
+      if (!ev.date) return;
 
-        const m = d.getMonth() + 1;
-        const day = d.getDate();
+      if (isSpecialToday(ev, td)) todayList.push(ev);
 
-        if (m === tMonth && day === tDay) todayList.push(ev);
+      const nextDate = getNextOccurrence(ev, td);
+      if (!nextDate) return;
 
-        const nextDate = new Date(td.getFullYear(), m - 1, day);
-        if (nextDate < td && (m !== tMonth || day !== tDay)) nextDate.setFullYear(td.getFullYear() + 1);
-
-        const diff = nextDate.getTime() - td.getTime();
-        if (diff > 0 && diff < minDiff) {
-            minDiff = diff;
-            nextEvt = { ...ev, nextDate, daysLeft: Math.ceil(diff / (1000 * 3600 * 24)) };
-        }
+      const diff = nextDate.getTime() - td.getTime();
+      if (diff > 0 && diff < minDiff) {
+        minDiff = diff;
+        nextEvt = { ...ev, nextDate, daysLeft: Math.ceil(diff / (1000 * 3600 * 24)) };
+      }
     });
     return { todaySpecials: todayList, nextSpecial: nextEvt };
   }, [specialEvents]);
 
   // ── 5. SETTINGS MODAL STATE ────────────────────────────────
-  const [isSettingsOpen,   setIsSettingsOpen]   = useState(false);
-  const [activeTab,        setActiveTab]        = useState('profile');
-  const [profileFormData,  setProfileFormData]  = useState(profile); 
-  const [eventFormData,    setEventFormData]    = useState({
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('profile');
+  const [profileFormData, setProfileFormData] = useState(profile);
+  const [eventFormData, setEventFormData] = useState({
     title: '', startDate: '', endDate: '', rewards: '', notes: '',
     category: 'study', status: 'todo', priority: 'medium', progress: 0,
   });
 
   const [dailyViewDate, setDailyViewDate] = useState(todayYMD);
-  const [dailyForm, setDailyForm] = useState({ 
-    startDate: todayYMD, time: '', endTime: '', task: '', repeat: 'none', customDays: 1, isShared: false 
+  const [dailyForm, setDailyForm] = useState({
+    startDate: todayYMD, time: '', endTime: '', task: '', repeat: 'none', customInterval: 1, customUnit: 'days', customDays: 1, isShared: false
   });
 
-  const [specialForm, setSpecialForm] = useState({ title: '', date: todayYMD, type: 'birthday' });
+  const [specialForm, setSpecialForm] = useState({ title: '', date: todayYMD, type: 'birthday', repeat: 'none', customInterval: 1, customUnit: 'days' });
 
   const filteredSettingsDailySchedule = useMemo(() => {
     return dailySchedule
       .filter(t => checkTaskOnDate(t, dailyViewDate))
-      .sort((a, b) => (a.time || "00:00").localeCompare(b.time || "00:00")); 
+      .sort((a, b) => (a.time || "00:00").localeCompare(b.time || "00:00"));
   }, [dailySchedule, dailyViewDate]);
 
   // ── 6. IMAGE CROP ──────────────────────────────────────────
   const [isCropModalOpen, setIsCropModalOpen] = useState(false);
-  const [upImg,           setUpImg]           = useState();
-  const [crop,            setCrop]            = useState({ unit: '%', width: 50, x: 25, y: 25 });
-  const [cropAspectRatio, setCropAspectRatio] = useState(9/16);
-  const [completedCrop,   setCompletedCrop]   = useState(null);
-  const imgRef    = useRef(null);
+  const [upImg, setUpImg] = useState();
+  const [crop, setCrop] = useState({ unit: '%', width: 50, x: 25, y: 25 });
+  const [cropAspectRatio, setCropAspectRatio] = useState(9 / 16);
+  const [completedCrop, setCompletedCrop] = useState(null);
+  const imgRef = useRef(null);
   const [cropTarget, setCropTarget] = useState('');
 
   const processImageBlob = (blob, target) => {
@@ -368,9 +491,9 @@ const GameRoadmap = ({ user }) => {
     reader.addEventListener('load', () => setUpImg(reader.result));
     reader.readAsDataURL(blob);
     setCropTarget(target);
-    if      (target === 'avatar')     { setCropAspectRatio(1/1);  setCrop({ unit: '%', width: 50, aspect: 1/1 }); }
-    else if (target === 'background') { setCropAspectRatio(21/9); setCrop({ unit: '%', width: 80, aspect: 21/9 }); }
-    else                              { setCropAspectRatio(21/9); setCrop({ unit: '%', width: 80, aspect: 21/9 }); }
+    if (target === 'avatar') { setCropAspectRatio(1 / 1); setCrop({ unit: '%', width: 50, aspect: 1 / 1 }); }
+    else if (target === 'background') { setCropAspectRatio(21 / 9); setCrop({ unit: '%', width: 80, aspect: 21 / 9 }); }
+    else { setCropAspectRatio(21 / 9); setCrop({ unit: '%', width: 80, aspect: 21 / 9 }); }
     setIsCropModalOpen(true);
   };
 
@@ -408,19 +531,19 @@ const GameRoadmap = ({ user }) => {
 
   const handleCropComplete = async () => {
     if (!completedCrop || !imgRef.current) return;
-    const image  = imgRef.current;
+    const image = imgRef.current;
     const canvas = document.createElement('canvas');
-    const scaleX = image.naturalWidth  / image.width;
+    const scaleX = image.naturalWidth / image.width;
     const scaleY = image.naturalHeight / image.height;
-    canvas.width  = completedCrop.width;
+    canvas.width = completedCrop.width;
     canvas.height = completedCrop.height;
     canvas.getContext('2d').drawImage(image,
       completedCrop.x * scaleX, completedCrop.y * scaleY,
       completedCrop.width * scaleX, completedCrop.height * scaleY,
       0, 0, completedCrop.width, completedCrop.height);
     const url = canvas.toDataURL('image/jpeg', 0.85);
-    if      (cropTarget === 'event')      setEventFormData(p => ({ ...p, croppedImage: url }));
-    else if (cropTarget === 'avatar')     setProfileFormData(p => ({ ...p, avatar: url }));
+    if (cropTarget === 'event') setEventFormData(p => ({ ...p, croppedImage: url }));
+    else if (cropTarget === 'avatar') setProfileFormData(p => ({ ...p, avatar: url }));
     else if (cropTarget === 'background') setProfileFormData(p => ({ ...p, background: url }));
     setIsCropModalOpen(false); setUpImg(null);
   };
@@ -430,11 +553,11 @@ const GameRoadmap = ({ user }) => {
     const upd = {
       ...profile,
       displayName: profileFormData.displayName,
-      avatar:      profileFormData.avatar,
-      background:  profileFormData.background,
-      title:       (profileFormData.title || "").toUpperCase(),
-      subtitle:    (profileFormData.subtitle || "").toUpperCase(),
-      bio:         profileFormData.bio || '',
+      avatar: profileFormData.avatar,
+      background: profileFormData.background,
+      title: (profileFormData.title || "").toUpperCase(),
+      subtitle: (profileFormData.subtitle || "").toUpperCase(),
+      bio: profileFormData.bio || '',
     };
     setProfile(upd); saveToCloud(upd, events, friendsList, dailySchedule, notifications, specialEvents);
     alert("Cấu hình đã được lưu thành công.");
@@ -443,10 +566,10 @@ const GameRoadmap = ({ user }) => {
   const handleAddEvent = (e) => {
     e.preventDefault();
     const startObj = new Date(eventFormData.startDate);
-    const endObj   = new Date(eventFormData.endDate);
+    const endObj = new Date(eventFormData.endDate);
     endObj.setHours(23, 59, 59, 999);
     const pad = n => n.toString().padStart(2, '0');
-    const dateStr = `${pad(startObj.getDate())}/${pad(startObj.getMonth()+1)} — ${pad(endObj.getDate())}/${pad(endObj.getMonth()+1)}`;
+    const dateStr = `${pad(startObj.getDate())}/${pad(startObj.getMonth() + 1)} — ${pad(endObj.getDate())}/${pad(endObj.getMonth() + 1)}`;
 
     let assignedRow = 0, isRowOccupied = true;
     while (isRowOccupied) {
@@ -455,18 +578,18 @@ const GameRoadmap = ({ user }) => {
     }
 
     const newEvent = {
-      id:       "ev_" + Date.now(),
-      title:    eventFormData.title,
+      id: "ev_" + Date.now(),
+      title: eventFormData.title,
       dateStr,
-      start:    startObj,
-      end:      endObj,
-      image:    eventFormData.croppedImage || "https://images.unsplash.com/photo-1555066931-4365d14bab8c?w=400&q=80",
-      rewards:  eventFormData.rewards,
-      notes:    eventFormData.notes,
+      start: startObj,
+      end: endObj,
+      image: eventFormData.croppedImage || profile.background,
+      rewards: eventFormData.rewards,
+      notes: eventFormData.notes,
       trackRow: assignedRow,
       isShared: false,
       category: eventFormData.category,
-      status:   eventFormData.status,
+      status: eventFormData.status,
       priority: eventFormData.priority,
       progress: Number(eventFormData.progress),
       reactions: {},
@@ -508,12 +631,14 @@ const GameRoadmap = ({ user }) => {
       task: dailyForm.task,
       repeat: dailyForm.repeat,
       customDays: Number(dailyForm.customDays) || 1,
+      customInterval: Number(dailyForm.customInterval) || 1,
+      customUnit: dailyForm.customUnit || 'days',
       isShared: dailyForm.isShared,
       completedDates: [],
       reactions: {},
       comments: []
     };
-    
+
     const updated = [...dailySchedule, newTask];
     setDailySchedule(updated);
     saveToCloud(profile, events, friendsList, updated, notifications, specialEvents);
@@ -524,7 +649,7 @@ const GameRoadmap = ({ user }) => {
     const updated = dailySchedule.map(t => {
       if (t.id === id) {
         const isCompleted = (t.completedDates || []).includes(targetDateStr);
-        const newCompleted = isCompleted 
+        const newCompleted = isCompleted
           ? (t.completedDates || []).filter(d => d !== targetDateStr)
           : [...(t.completedDates || []), targetDateStr];
         return { ...t, completedDates: newCompleted };
@@ -550,11 +675,11 @@ const GameRoadmap = ({ user }) => {
   const handleAddSpecialEvent = (e) => {
     e.preventDefault();
     if (!specialForm.title || !specialForm.date) return;
-    const newEvt = { id: "sp_" + Date.now(), title: specialForm.title, date: specialForm.date, type: specialForm.type };
-    const updated = [...specialEvents, newEvt].sort((a,b) => new Date(a.date) - new Date(b.date));
+    const newEvt = { id: "sp_" + Date.now(), title: specialForm.title, date: specialForm.date, type: specialForm.type, repeat: specialForm.repeat, customInterval: Number(specialForm.customInterval) || 1, customUnit: specialForm.customUnit || 'days' };
+    const updated = [...specialEvents, newEvt].sort((a, b) => new Date(a.date) - new Date(b.date));
     setSpecialEvents(updated);
     saveToCloud(profile, events, friendsList, dailySchedule, notifications, updated);
-    setSpecialForm({ title: '', date: todayYMD, type: 'birthday' });
+    setSpecialForm({ title: '', date: todayYMD, type: 'birthday', repeat: 'none', customInterval: 1, customUnit: 'days' });
   };
 
   const handleDeleteSpecialEvent = (id) => {
@@ -614,7 +739,7 @@ const GameRoadmap = ({ user }) => {
         const targetFriends = targetData.friends || [];
         const targetNotifs = targetData.notifications || [];
         if (!targetFriends.includes(user.uid)) targetFriends.push(user.uid);
-        
+
         targetNotifs.push({
           id: "acc_" + Date.now(),
           fromUid: user.uid,
@@ -628,7 +753,7 @@ const GameRoadmap = ({ user }) => {
         await setDoc(targetRef, { friends: targetFriends, notifications: targetNotifs }, { merge: true });
       }
       alert("Đã kết bạn thành công!");
-    } catch(e) { console.error(e); }
+    } catch (e) { console.error(e); }
   };
 
   const handleRejectFriend = async (notif) => {
@@ -639,7 +764,7 @@ const GameRoadmap = ({ user }) => {
 
   const handleRemoveFriend = async (friendUid) => {
     if (!window.confirm("Bạn có chắc chắn muốn hủy kết bạn với người này? Thao tác này không thể hoàn tác.")) return;
-    
+
     const newFriends = friendsList.filter(id => id !== friendUid);
     setFriendsList(newFriends);
     await setDoc(doc(db, "users", user.uid), { friends: newFriends }, { merge: true });
@@ -655,13 +780,13 @@ const GameRoadmap = ({ user }) => {
 
   // ── TƯƠNG TÁC: CẢM XÚC, BÌNH LUẬN & TRẢ LỜI ──
   const handleInteract = async (targetUid, itemId, itemType, actionType, payload, replyData = null, targetViewDate = null) => {
-    if(!user) return;
+    if (!user) return;
     try {
       const docRef = doc(db, "users", targetUid);
       const docSnap = await getDoc(docRef);
       if (!docSnap.exists()) return;
       const d = docSnap.data();
-      
+
       const targetList = Array.isArray(d[itemType === 'event' ? 'events' : 'dailySchedule']) ? d[itemType === 'event' ? 'events' : 'dailySchedule'] : [];
       const itemIndex = targetList.findIndex(x => x.id === itemId);
       if (itemIndex === -1) return;
@@ -685,11 +810,11 @@ const GameRoadmap = ({ user }) => {
           replyToUid: replyData ? replyData.uid : null, replyToName: replyData ? replyData.displayName : null
         });
 
-        setCommentInputs(p => ({ ...p, [itemId]: '' })); 
-        setReplyingTo(p => { const newP = {...p}; delete newP[itemId]; return newP; });
-        
-        notifMsgForOwner = (replyData && replyData.uid !== targetUid) 
-          ? `đã bình luận trong bài viết của bạn: "${payload}"` 
+        setCommentInputs(p => ({ ...p, [itemId]: '' }));
+        setReplyingTo(p => { const newP = { ...p }; delete newP[itemId]; return newP; });
+
+        notifMsgForOwner = (replyData && replyData.uid !== targetUid)
+          ? `đã bình luận trong bài viết của bạn: "${payload}"`
           : (replyData ? `đã trả lời bình luận của bạn: "${payload}"` : `đã bình luận: "${payload}"`);
       }
 
@@ -701,7 +826,7 @@ const GameRoadmap = ({ user }) => {
         });
       }
 
-      await setDoc(docRef, { 
+      await setDoc(docRef, {
         [itemType === 'event' ? 'events' : 'dailySchedule']: targetList,
         notifications: notifs
       }, { merge: true });
@@ -710,24 +835,24 @@ const GameRoadmap = ({ user }) => {
         const repliedUserRef = doc(db, "users", replyData.uid);
         const repliedUserSnap = await getDoc(repliedUserRef);
         if (repliedUserSnap.exists()) {
-            const ruData = repliedUserSnap.data();
-            const ruNotifs = Array.isArray(ruData.notifications) ? ruData.notifications : [];
-            ruNotifs.push({
-                id: Date.now().toString() + "_2", fromUid: user.uid, fromName: profile.displayName, fromAvatar: profile.avatar,
-                text: `đã trả lời bình luận của bạn: "${payload}"`, read: false, createdAt: new Date().toISOString(),
-                itemId: itemId, itemType: itemType, targetDate: targetViewDate, postOwnerUid: targetUid
-            });
-            await setDoc(repliedUserRef, { notifications: ruNotifs }, { merge: true });
+          const ruData = repliedUserSnap.data();
+          const ruNotifs = Array.isArray(ruData.notifications) ? ruData.notifications : [];
+          ruNotifs.push({
+            id: Date.now().toString() + "_2", fromUid: user.uid, fromName: profile.displayName, fromAvatar: profile.avatar,
+            text: `đã trả lời bình luận của bạn: "${payload}"`, read: false, createdAt: new Date().toISOString(),
+            itemId: itemId, itemType: itemType, targetDate: targetViewDate, postOwnerUid: targetUid
+          });
+          await setDoc(repliedUserRef, { notifications: ruNotifs }, { merge: true });
         }
       }
 
       if (viewingFriendFeed && viewingFriendFeed.uid === targetUid) {
         setViewingFriendFeed(prev => {
-          const newFeed = {...prev};
-          if(itemType === 'event'){
-            newFeed.events = targetList.filter(ev => ev.isShared).map(ev => ({ ...ev, start: new Date(ev.start), end: new Date(ev.end) })).sort((a,b) => a.start - b.start);
+          const newFeed = { ...prev };
+          if (itemType === 'event') {
+            newFeed.events = targetList.filter(ev => ev.isShared).map(ev => ({ ...ev, start: new Date(ev.start), end: new Date(ev.end) })).sort((a, b) => a.start - b.start);
           } else {
-            newFeed.daily = targetList.filter(t => t.isShared && checkTaskOnDate(t, prev.viewDate)).sort((a,b) => (a.time||"").localeCompare(b.time||""));
+            newFeed.daily = targetList.filter(t => t.isShared && checkTaskOnDate(t, prev.viewDate)).sort((a, b) => (a.time || "").localeCompare(b.time || ""));
           }
           return newFeed;
         });
@@ -745,7 +870,7 @@ const GameRoadmap = ({ user }) => {
     if (!fDoc.exists()) return;
     const fData = fDoc.data(); let fProfile = fData.profile;
     if (!fProfile.background) fProfile.background = fProfile.avatar;
-    
+
     const sharedEvents = (Array.isArray(fData.events) ? fData.events : []).filter(ev => ev.isShared).map(ev => ({
       ...ev, start: ev.start && ev.start.toDate ? ev.start.toDate() : new Date(ev.start), end: ev.end && ev.end.toDate ? ev.end.toDate() : new Date(ev.end),
     })).sort((a, b) => a.start - b.start);
@@ -761,29 +886,29 @@ const GameRoadmap = ({ user }) => {
 
   // 🔥 XỬ LÝ CLICK THÔNG BÁO VÀ AUTO-SCROLL ĐẾN POST
   const handleNotifClick = async (notif) => {
-    if (notif.itemType === 'friend_request') return; 
+    if (notif.itemType === 'friend_request') return;
 
-    const updated = notifications.map(n => n.id === notif.id ? {...n, read: true} : n);
+    const updated = notifications.map(n => n.id === notif.id ? { ...n, read: true } : n);
     setNotifications(updated);
     setDoc(doc(db, "users", user.uid), { notifications: updated }, { merge: true });
-    
+
     setIsNotifOpen(false);
 
-    const targetUid = notif.postOwnerUid || user.uid; 
+    const targetUid = notif.postOwnerUid || user.uid;
     let targetDate = todayYMD;
-    
+
     if (notif.itemType === 'daily') {
       targetDate = notif.targetDate || formatDateToYMD(notif.createdAt);
     }
-    
+
     await handleViewFriendFeed(targetUid, targetDate);
-    setTargetScrollId(notif.itemId); 
+    setTargetScrollId(notif.itemId);
   };
 
   const markNotifsRead = async () => {
     setIsNotifOpen(!isNotifOpen);
     if (isNotifOpen && notifications.some(n => !n.read)) {
-      const updated = notifications.map(n => ({...n, read: true}));
+      const updated = notifications.map(n => ({ ...n, read: true }));
       setNotifications(updated);
       await setDoc(doc(db, "users", user.uid), { notifications: updated }, { merge: true });
     }
@@ -804,19 +929,19 @@ const GameRoadmap = ({ user }) => {
 
   const stats = useMemo(() => {
     const safeEvents = Array.isArray(events) ? events : [];
-    const total     = safeEvents.length;
-    const done      = safeEvents.filter(e => e.status === 'done').length;
-    const inProg    = safeEvents.filter(e => e.status === 'in-progress').length;
-    const upcoming  = safeEvents.filter(e => e.start && e.start > now).length;
+    const total = safeEvents.length;
+    const done = safeEvents.filter(e => e.status === 'done').length;
+    const inProg = safeEvents.filter(e => e.status === 'in-progress').length;
+    const upcoming = safeEvents.filter(e => e.start && e.start > now).length;
     const catBreakdown = CATEGORIES.map(c => ({ ...c, count: safeEvents.filter(e => e.category === c.id).length }));
     return { total, done, inProg, upcoming, catBreakdown };
   }, [events]);
 
   const urgentEvents = useMemo(() => {
-    return (Array.isArray(events) ? events : []).filter(ev => { 
-      if(!ev.end) return false;
-      const d = getDaysLeft(ev); 
-      return d >= 0 && d <= 3 && ev.status !== 'done'; 
+    return (Array.isArray(events) ? events : []).filter(ev => {
+      if (!ev.end) return false;
+      const d = getDaysLeft(ev);
+      return d >= 0 && d <= 3 && ev.status !== 'done';
     });
   }, [events]);
 
@@ -860,7 +985,7 @@ const GameRoadmap = ({ user }) => {
           </div>
 
           <div className="flex items-center gap-1.5 md:gap-2">
-            
+
             <button onClick={() => setIsDailyModalOpen(true)}
               className="flex items-center gap-1.5 text-[11px] font-black uppercase px-2.5 md:px-4 py-2 rounded-xl transition-all shadow-sm hover:scale-105 hover:shadow-md cursor-pointer"
               style={{ background: '#e0e7ff', color: '#4f46e5', border: '1px solid #c7d2fe' }}>
@@ -884,7 +1009,7 @@ const GameRoadmap = ({ user }) => {
                 🔔
                 {unreadNotifs > 0 && <span className="absolute -top-1.5 -right-1.5 bg-red-500 rounded-full min-w-[1.25rem] px-1 h-5 text-white text-[10px] font-black flex items-center justify-center shadow-md animate-bounce">{unreadNotifs}</span>}
               </button>
-              
+
               {isNotifOpen && (
                 <div className="absolute top-12 right-0 w-72 md:w-80 bg-white border-2 border-pink-100 rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.15)] overflow-hidden flex flex-col">
                   <div className="bg-pink-50 px-4 py-2.5 text-[12px] font-black text-pink-600 border-b border-pink-100 flex justify-between items-center">
@@ -893,37 +1018,37 @@ const GameRoadmap = ({ user }) => {
                   </div>
                   <div className="max-h-72 overflow-y-auto custom-scrollbar p-2 space-y-1">
                     {validNotifs.length === 0 ? <div className="text-[12px] text-center text-slate-400 p-6 font-bold">Chưa có thông báo nào.</div> :
-                     validNotifs.map(n => {
-                       if (n.itemType === 'friend_request') {
-                         return (
-                           <div key={n.id} className="flex flex-col gap-2 p-3 rounded-xl transition-colors bg-blue-50/50 border border-blue-100 mb-1 shadow-sm">
-                             <div className="flex gap-3 items-center">
-                               <img src={n.fromAvatar} alt="" className="w-10 h-10 rounded-full object-cover border border-white shadow-sm shrink-0"/>
-                               <div className="text-[12px] text-slate-600 leading-snug flex-1">
-                                 <span className="font-black text-slate-800">{n.fromName}</span> {n.text}
-                               </div>
-                             </div>
-                             {!n.handled && (
-                               <div className="flex gap-2 ml-12 mt-1">
-                                 <button onClick={(e) => { e.stopPropagation(); handleAcceptFriend(n); }} className="flex-1 bg-blue-500 text-white py-1.5 rounded-lg text-[11px] font-black shadow-sm cursor-pointer hover:bg-blue-600 transition-colors">Đồng ý</button>
-                                 <button onClick={(e) => { e.stopPropagation(); handleRejectFriend(n); }} className="flex-1 bg-white border border-slate-200 text-slate-600 py-1.5 rounded-lg text-[11px] font-black shadow-sm cursor-pointer hover:bg-slate-50 transition-colors">Từ chối</button>
-                               </div>
-                             )}
-                           </div>
-                         );
-                       }
-                       // Thông báo bình thường
-                       return (
-                         <div key={n.id} onClick={() => handleNotifClick(n)} className={`flex gap-3 p-2.5 rounded-xl transition-colors cursor-pointer border ${n.read ? 'bg-white border-transparent hover:bg-slate-50' : 'bg-pink-50/50 border-pink-100 hover:bg-pink-50'}`}>
-                           <img src={n.fromAvatar} alt="" className="w-10 h-10 rounded-full object-cover border border-slate-200 shrink-0 shadow-sm"/>
-                           <div className="text-[12px] text-slate-600 leading-snug flex-1">
-                             <span className="font-black text-slate-800">{n.fromName}</span> {n.text}
-                             <div className="text-[9px] text-slate-400 font-bold mt-1 uppercase tracking-wider">{new Date(n.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - {new Date(n.createdAt).toLocaleDateString()}</div>
-                           </div>
-                           {!n.read && <div className="w-2 h-2 rounded-full bg-pink-500 self-center shrink-0"></div>}
-                         </div>
-                       )
-                     })}
+                      validNotifs.map(n => {
+                        if (n.itemType === 'friend_request') {
+                          return (
+                            <div key={n.id} className="flex flex-col gap-2 p-3 rounded-xl transition-colors bg-blue-50/50 border border-blue-100 mb-1 shadow-sm">
+                              <div className="flex gap-3 items-center">
+                                <img src={n.fromAvatar} alt="" className="w-10 h-10 rounded-full object-cover border border-white shadow-sm shrink-0" />
+                                <div className="text-[12px] text-slate-600 leading-snug flex-1">
+                                  <span className="font-black text-slate-800">{n.fromName}</span> {n.text}
+                                </div>
+                              </div>
+                              {!n.handled && (
+                                <div className="flex gap-2 ml-12 mt-1">
+                                  <button onClick={(e) => { e.stopPropagation(); handleAcceptFriend(n); }} className="flex-1 bg-blue-500 text-white py-1.5 rounded-lg text-[11px] font-black shadow-sm cursor-pointer hover:bg-blue-600 transition-colors">Đồng ý</button>
+                                  <button onClick={(e) => { e.stopPropagation(); handleRejectFriend(n); }} className="flex-1 bg-white border border-slate-200 text-slate-600 py-1.5 rounded-lg text-[11px] font-black shadow-sm cursor-pointer hover:bg-slate-50 transition-colors">Từ chối</button>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        }
+                        // Thông báo bình thường
+                        return (
+                          <div key={n.id} onClick={() => handleNotifClick(n)} className={`flex gap-3 p-2.5 rounded-xl transition-colors cursor-pointer border ${n.read ? 'bg-white border-transparent hover:bg-slate-50' : 'bg-pink-50/50 border-pink-100 hover:bg-pink-50'}`}>
+                            <img src={n.fromAvatar} alt="" className="w-10 h-10 rounded-full object-cover border border-slate-200 shrink-0 shadow-sm" />
+                            <div className="text-[12px] text-slate-600 leading-snug flex-1">
+                              <span className="font-black text-slate-800">{n.fromName}</span> {n.text}
+                              <div className="text-[9px] text-slate-400 font-bold mt-1 uppercase tracking-wider">{new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(n.createdAt).toLocaleDateString()}</div>
+                            </div>
+                            {!n.read && <div className="w-2 h-2 rounded-full bg-pink-500 self-center shrink-0"></div>}
+                          </div>
+                        )
+                      })}
                   </div>
                 </div>
               )}
@@ -956,20 +1081,20 @@ const GameRoadmap = ({ user }) => {
               <div className="absolute bottom-0 left-0 right-0 p-4 z-10 pointer-events-none">
                 <div className="text-white font-black text-[17px] leading-tight drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">{profile.title}</div>
                 <div className="text-[12px] font-bold mt-0.5 text-pink-300 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">{profile.subtitle}</div>
-                {profile.bio && <div className="text-[11px] font-medium text-slate-800 mt-1.5 line-clamp-2 bg-white/80 p-1.5 rounded-lg border border-white shadow-sm pointer-events-auto">{profile.bio}</div>}
+
               </div>
-              
+
               <div className="md:hidden absolute inset-0 flex items-center justify-center bg-black/10 transition-opacity z-20">
                 <button onClick={() => setShowMobileMap(true)}
                   className="bg-pink-500 text-white font-black px-6 py-3 rounded-full text-sm shadow-[0_4px_15px_rgba(236,72,153,0.4)] border-2 border-white cursor-pointer active:scale-95">
-                  XEM LỊCH TRÌNH 
+                  XEM LỊCH TRÌNH
                 </button>
               </div>
             </div>
 
             {/* 🔥 SỰ KIỆN QUAN TRỌNG */}
             <div className="flex-1 overflow-y-auto space-y-3 custom-scrollbar pr-1">
-              
+
               <div className="rounded-2xl p-4 bg-gradient-to-br from-pink-50 to-white shadow-sm border border-pink-100">
                 <div className="text-[11px] font-black text-pink-500 uppercase tracking-widest mb-3 flex items-center gap-1.5">
                   <span className="text-sm">🎈</span> Sự Kiện Hôm Nay
@@ -1108,11 +1233,11 @@ const GameRoadmap = ({ user }) => {
 
                   <div className="relative w-full h-full" style={{ paddingTop: '12px' }}>
                     {filteredEvents.map((event) => {
-                      const leftPct  = Math.max(0, ((event.start.getTime() - startDate.getTime()) / totalDuration) * 100);
+                      const leftPct = Math.max(0, ((event.start.getTime() - startDate.getTime()) / totalDuration) * 100);
                       const rawWidth = ((event.end.getTime() - event.start.getTime()) / totalDuration) * 100;
                       const widthPct = Math.min(rawWidth, 100 - leftPct);
-                      const top      = event.trackRow * 76;
-                      const cat      = getCat(event.category);
+                      const top = event.trackRow * 76;
+                      const cat = getCat(event.category);
                       const progress = getEventProgress(event);
 
                       return (
@@ -1168,11 +1293,11 @@ const GameRoadmap = ({ user }) => {
             <div className="h-16 flex items-center justify-between px-4 md:px-6 shrink-0 bg-pink-50 border-b border-pink-100">
               <div className="flex gap-2 overflow-x-auto custom-scrollbar whitespace-nowrap pr-4">
                 {[
-                  { id: 'profile', label: 'Tài Khoản',     icon: '⚙️' },
-                  { id: 'events',  label: 'Quản Lý Lịch',  icon: '📅' },
-                  { id: 'daily',   label: 'Lịch Ngày',     icon: '⏰' },
-                  { id: 'special', label: 'Sự Kiện',       icon: '🎈' }, 
-                  { id: 'friends', label: 'Bạn Bè',        icon: '👥' },
+                  { id: 'profile', label: 'Tài Khoản', icon: '⚙️' },
+                  { id: 'events', label: 'Quản Lý Lịch', icon: '📅' },
+                  { id: 'daily', label: 'Lịch Ngày', icon: '⏰' },
+                  { id: 'special', label: 'Sự Kiện', icon: '🎈' },
+                  { id: 'friends', label: 'Bạn Bè', icon: '👥' },
                 ].map(tab => (
                   <button key={tab.id} onClick={() => setActiveTab(tab.id)}
                     className="px-4 py-2 rounded-xl text-[11px] md:text-[12px] font-black uppercase tracking-wide transition-all shadow-sm cursor-pointer shrink-0"
@@ -1215,9 +1340,9 @@ const GameRoadmap = ({ user }) => {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     {[
                       { key: 'displayName', label: 'Tên hiển thị', placeholder: 'Nhập tên của bạn' },
-                      { key: 'title',       label: 'Tiêu đề lớn',  placeholder: 'TỔNG QUAN LỊCH TRÌNH' },
-                      { key: 'subtitle',    label: 'Tiêu đề phụ',  placeholder: 'Năm học mới' },
-                      { key: 'bio',         label: 'Giới thiệu',   placeholder: 'Mô tả ngắn về bạn...' },
+                      { key: 'title', label: 'Tiêu đề lớn', placeholder: 'TỔNG QUAN LỊCH TRÌNH' },
+                      { key: 'subtitle', label: 'Tiêu đề phụ', placeholder: 'Năm học mới' },
+                      { key: 'bio', label: 'Tiểu sử', placeholder: 'Mô tả ngắn về bạn...' },
                     ].map(f => (
                       <div key={f.key}>
                         <label className="text-[11px] font-black uppercase mb-2 block text-indigo-500">{f.label}</label>
@@ -1231,8 +1356,8 @@ const GameRoadmap = ({ user }) => {
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     {[
-                      { key: 'avatar',     label: 'Ảnh đại diện (1:1)',  target: 'avatar' },
-                      { key: 'background', label: 'Ảnh nền (21:9)', target: 'background' }, 
+                      { key: 'avatar', label: 'Ảnh đại diện (1:1)', target: 'avatar' },
+                      { key: 'background', label: 'Ảnh nền (21:9)', target: 'background' },
                     ].map(f => (
                       <div key={f.key}>
                         <label className="text-[11px] font-black uppercase mb-2 block text-pink-500">{f.label}</label>
@@ -1370,16 +1495,16 @@ const GameRoadmap = ({ user }) => {
                         const d = new Date(dailyViewDate); d.setDate(d.getDate() - 1);
                         setDailyViewDate(formatDateToYMD(d));
                       }} className="w-10 h-10 rounded-xl bg-white border border-indigo-200 text-indigo-600 font-black shadow-sm hover:bg-indigo-600 hover:text-white transition-colors cursor-pointer">←</button>
-                      
+
                       <input type="date" value={dailyViewDate} onChange={e => setDailyViewDate(e.target.value)}
                         className="px-4 py-2.5 rounded-xl border-2 border-indigo-200 outline-none font-black text-slate-700 bg-white" />
-                      
+
                       <button onClick={() => {
                         const d = new Date(dailyViewDate); d.setDate(d.getDate() + 1);
                         setDailyViewDate(formatDateToYMD(d));
                       }} className="w-10 h-10 rounded-xl bg-white border border-indigo-200 text-indigo-600 font-black shadow-sm hover:bg-indigo-600 hover:text-white transition-colors cursor-pointer">→</button>
                     </div>
-                    <button onClick={() => setDailyViewDate(todayYMD)} 
+                    <button onClick={() => setDailyViewDate(todayYMD)}
                       className={`text-[11px] font-black px-4 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer ${dailyViewDate === todayYMD ? 'bg-indigo-600 text-white' : 'bg-white text-indigo-600 border border-indigo-200'}`}>Hôm nay</button>
                   </div>
 
@@ -1391,7 +1516,7 @@ const GameRoadmap = ({ user }) => {
                           className="w-full rounded-2xl px-3 py-2.5 text-sm font-bold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-indigo-400 focus:bg-white transition-all cursor-pointer"
                           value={dailyForm.startDate} onChange={e => setDailyForm(p => ({ ...p, startDate: e.target.value }))} />
                       </div>
-                      
+
                       <div className="col-span-2 md:col-span-1 flex gap-2">
                         <div className="w-1/2">
                           <label className="text-[10px] font-black uppercase mb-1.5 block text-indigo-500">Giờ BĐ</label>
@@ -1406,21 +1531,43 @@ const GameRoadmap = ({ user }) => {
                             value={dailyForm.endTime} onChange={e => setDailyForm(p => ({ ...p, endTime: e.target.value }))} />
                         </div>
                       </div>
-                      
+
                       <div className="col-span-2">
                         <label className="text-[10px] font-black uppercase mb-1.5 block text-indigo-500">Chu kỳ lặp</label>
                         <select
                           className="w-full rounded-2xl px-3 py-2.5 text-[13px] font-bold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-indigo-400 cursor-pointer"
                           value={dailyForm.repeat} onChange={e => setDailyForm(p => ({ ...p, repeat: e.target.value }))}>
-                          <option value="none">Không lặp lại</option>
-                          <option value="daily">Mỗi ngày</option>
-                          <option value="weekly">Mỗi tuần</option>
-                          <option value="biweekly">Mỗi 2 tuần</option>
-                          <option value="yearly">Mỗi năm</option>
-                          <option value="custom">Tùy chỉnh (Số ngày lặp)</option>
+                          <option value="none">🚫 Không lặp lại</option>
+                          <option value="daily">📅 Mỗi ngày</option>
+                          <option value="weekly">📆 Mỗi tuần</option>
+                          <option value="biweekly">🗓️ Mỗi 2 tuần</option>
+                          <option value="monthly">🌙 Mỗi tháng</option>
+                          <option value="yearly">🎯 Mỗi năm</option>
+                          <option value="custom">⚙️ Tùy chỉnh</option>
                         </select>
                       </div>
                     </div>
+
+                    {dailyForm.repeat === 'custom' && (
+                      <div className="flex items-end gap-3 bg-indigo-50 p-4 rounded-2xl border border-indigo-100">
+                        <div className="flex-1">
+                          <label className="text-[10px] font-black uppercase mb-1.5 block text-indigo-500">Lặp mỗi</label>
+                          <input required type="number" min="1" max="999"
+                            className="w-full rounded-2xl px-3 py-2.5 text-sm font-bold outline-none bg-white border-2 border-indigo-200 text-slate-700 focus:border-indigo-400 transition-all text-center"
+                            value={dailyForm.customInterval} onChange={e => setDailyForm(p => ({ ...p, customInterval: e.target.value }))} />
+                        </div>
+                        <div className="flex-1">
+                          <label className="text-[10px] font-black uppercase mb-1.5 block text-indigo-500">Đơn vị</label>
+                          <select className="w-full rounded-2xl px-3 py-2.5 text-sm font-bold outline-none bg-white border-2 border-indigo-200 text-slate-700 focus:border-indigo-400 cursor-pointer"
+                            value={dailyForm.customUnit} onChange={e => setDailyForm(p => ({ ...p, customUnit: e.target.value }))}>
+                            <option value="days">Ngày</option>
+                            <option value="weeks">Tuần</option>
+                            <option value="months">Tháng</option>
+                            <option value="years">Năm</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
 
                     <div className="flex flex-col md:flex-row gap-4 items-end mt-2">
                       <div className="flex-1 w-full relative">
@@ -1428,21 +1575,12 @@ const GameRoadmap = ({ user }) => {
                         <input required type="text" placeholder="Ví dụ: Tập thể dục..."
                           className="w-full rounded-2xl px-4 py-3 text-sm font-semibold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-indigo-400 focus:bg-white transition-all pr-28"
                           value={dailyForm.task} onChange={e => setDailyForm(p => ({ ...p, task: e.target.value }))} />
-                          
+
                         <label className="absolute right-2 bottom-2 bg-pink-50 border border-pink-200 text-pink-600 px-3 py-1.5 rounded-xl text-[10px] font-black cursor-pointer flex items-center gap-1.5 transition-colors hover:bg-pink-100">
                           <input type="checkbox" checked={dailyForm.isShared} onChange={e => setDailyForm(p => ({ ...p, isShared: e.target.checked }))} className="accent-pink-500 cursor-pointer" />
                           Công khai
                         </label>
                       </div>
-
-                      {dailyForm.repeat === 'custom' && (
-                        <div className="w-full md:w-28">
-                          <label className="text-[10px] font-black uppercase mb-1.5 block text-indigo-500">Số ngày lặp</label>
-                          <input required type="number" min="2" max="365"
-                            className="w-full rounded-2xl px-3 py-3 text-sm font-bold outline-none bg-slate-50 border-2 border-slate-200 text-slate-700 focus:border-indigo-400 focus:bg-white transition-all text-center"
-                            value={dailyForm.customDays} onChange={e => setDailyForm(p => ({ ...p, customDays: e.target.value }))} />
-                        </div>
-                      )}
 
                       <button type="submit"
                         className="w-full md:w-auto px-6 py-3.5 rounded-2xl font-black text-sm transition-all hover:-translate-y-1 shadow-[0_10px_20px_rgba(99,102,241,0.3)] bg-gradient-to-r from-indigo-500 to-blue-500 text-white whitespace-nowrap cursor-pointer">
@@ -1455,7 +1593,7 @@ const GameRoadmap = ({ user }) => {
                     <div className="text-[13px] font-black uppercase text-indigo-500 mb-4 flex items-center gap-2">
                       <span className="text-xl">⏰</span> Lịch trình ngày {dailyViewDate} ({filteredSettingsDailySchedule.length})
                     </div>
-                    
+
                     {filteredSettingsDailySchedule.length === 0 ? (
                       <div className="text-[13px] italic text-slate-400 py-6 text-center border-2 border-dashed border-slate-100 rounded-2xl">
                         Trống trơn! Hãy dành thời gian nghỉ ngơi hoặc lên kế hoạch mới nhé.
@@ -1471,11 +1609,11 @@ const GameRoadmap = ({ user }) => {
                                   className={`w-7 h-7 rounded-full flex items-center justify-center text-sm shrink-0 transition-colors shadow-inner cursor-pointer ${isDoneOnThisDate ? 'bg-emerald-500 text-white border border-emerald-600' : 'bg-slate-50 border-2 border-slate-300 text-transparent hover:border-emerald-400'}`}>
                                   ✔
                                 </button>
-                                
+
                                 <div className={`text-[12px] md:text-[14px] font-black font-mono px-2 md:px-3 py-1.5 rounded-xl border shrink-0 text-center ${isDoneOnThisDate ? 'bg-slate-100 text-slate-400 border-slate-200' : 'bg-indigo-50 text-indigo-600 border-indigo-200'}`}>
-                                  {item.time} {item.endTime && <><br/><span className="text-[10px] text-slate-400">{item.endTime}</span></>}
+                                  {item.time} {item.endTime && <><br /><span className="text-[10px] text-slate-400">{item.endTime}</span></>}
                                 </div>
-                                
+
                                 <div className="flex-1 min-w-0">
                                   <div className={`text-[13px] md:text-[14px] font-bold truncate ${isDoneOnThisDate ? 'line-through text-slate-400' : 'text-slate-700'}`}>
                                     {item.task}
@@ -1532,7 +1670,42 @@ const GameRoadmap = ({ user }) => {
                           className="w-full rounded-2xl px-3 py-2.5 text-sm font-bold outline-none bg-white border border-pink-200 text-slate-700 focus:border-pink-500 shadow-inner cursor-pointer"
                           value={specialForm.date} onChange={e => setSpecialForm(p => ({ ...p, date: e.target.value }))} />
                       </div>
+                      <div className="col-span-1 md:col-span-3">
+                        <label className="text-[10px] font-black uppercase mb-1.5 block text-pink-500">Chu kỳ lặp</label>
+                        <select className="w-full rounded-2xl px-3 py-3 text-[13px] font-bold outline-none bg-white border border-pink-200 text-slate-700 focus:border-pink-500 cursor-pointer shadow-inner"
+                          value={specialForm.repeat} onChange={e => setSpecialForm(p => ({ ...p, repeat: e.target.value }))}>
+                          <option value="none">🚫 Không lặp</option>
+                          <option value="daily">📅 Mỗi ngày</option>
+                          <option value="weekly">📆 Mỗi tuần</option>
+                          <option value="biweekly">🗓️ Mỗi 2 tuần</option>
+                          <option value="monthly">🌙 Mỗi tháng</option>
+                          <option value="yearly">🎯 Mỗi năm</option>
+                          <option value="custom">⚙️ Tùy chỉnh</option>
+                        </select>
+                      </div>
                     </div>
+
+                    {specialForm.repeat === 'custom' && (
+                      <div className="flex items-end gap-3 bg-pink-50 p-4 rounded-2xl border border-pink-100">
+                        <div className="flex-1">
+                          <label className="text-[10px] font-black uppercase mb-1.5 block text-pink-500">Lặp mỗi</label>
+                          <input required type="number" min="1" max="999"
+                            className="w-full rounded-2xl px-3 py-2.5 text-sm font-bold outline-none bg-white border-2 border-pink-200 text-slate-700 focus:border-pink-400 transition-all text-center"
+                            value={specialForm.customInterval} onChange={e => setSpecialForm(p => ({ ...p, customInterval: e.target.value }))} />
+                        </div>
+                        <div className="flex-1">
+                          <label className="text-[10px] font-black uppercase mb-1.5 block text-pink-500">Đơn vị</label>
+                          <select className="w-full rounded-2xl px-3 py-2.5 text-sm font-bold outline-none bg-white border-2 border-pink-200 text-slate-700 focus:border-pink-400 cursor-pointer"
+                            value={specialForm.customUnit} onChange={e => setSpecialForm(p => ({ ...p, customUnit: e.target.value }))}>
+                            <option value="days">Ngày</option>
+                            <option value="weeks">Tuần</option>
+                            <option value="months">Tháng</option>
+                            <option value="years">Năm</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
+
                     <button type="submit"
                       className="w-full py-3.5 rounded-2xl font-black uppercase text-sm tracking-wider transition-all hover:-translate-y-1 shadow-md bg-pink-500 text-white cursor-pointer mt-2">
                       LƯU SỰ KIỆN
@@ -1591,8 +1764,8 @@ const GameRoadmap = ({ user }) => {
                               </div>
                             </div>
                             <div className="flex gap-2">
-                               <button onClick={() => handleAcceptFriend(req)} className="flex-1 sm:flex-none bg-blue-500 text-white px-5 py-2.5 rounded-xl text-[12px] font-black shadow-sm hover:bg-blue-600 transition-colors cursor-pointer">Đồng ý</button>
-                               <button onClick={() => handleRejectFriend(req)} className="flex-1 sm:flex-none bg-slate-100 border border-slate-200 text-slate-600 px-5 py-2.5 rounded-xl text-[12px] font-black shadow-sm hover:bg-slate-200 transition-colors cursor-pointer">Từ chối</button>
+                              <button onClick={() => handleAcceptFriend(req)} className="flex-1 sm:flex-none bg-blue-500 text-white px-5 py-2.5 rounded-xl text-[12px] font-black shadow-sm hover:bg-blue-600 transition-colors cursor-pointer">Đồng ý</button>
+                              <button onClick={() => handleRejectFriend(req)} className="flex-1 sm:flex-none bg-slate-100 border border-slate-200 text-slate-600 px-5 py-2.5 rounded-xl text-[12px] font-black shadow-sm hover:bg-slate-200 transition-colors cursor-pointer">Từ chối</button>
                             </div>
                           </div>
                         ))}
@@ -1659,12 +1832,12 @@ const GameRoadmap = ({ user }) => {
               <h2 className="font-black text-xl text-indigo-900 flex items-center gap-2"><span>📅</span> Lịch Trình Trong Ngày</h2>
               <button onClick={() => setIsDailyModalOpen(false)} className="text-slate-400 hover:text-indigo-600 hover:bg-white w-8 h-8 rounded-full flex items-center justify-center font-black transition-all shadow-sm border border-transparent hover:border-indigo-200 cursor-pointer">✕</button>
             </div>
-            
+
             <div className="flex-1 overflow-y-auto p-5 md:p-6 bg-slate-50/50 custom-scrollbar flex flex-col gap-5">
-              
-              <div className="flex flex-col sm:flex-row items-center gap-3 bg-white p-3 rounded-2xl border-2 border-indigo-50 shadow-sm">
-                <select 
-                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl border-2 border-indigo-100 outline-none font-black text-indigo-700 bg-indigo-50/50 cursor-pointer text-sm"
+
+              <div className="flex flex-col sm:flex-row items-center gap-3 bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
+                <select
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl border border-slate-200 outline-none font-black text-indigo-700 bg-indigo-50/50 cursor-pointer text-sm hover:ring-2 hover:ring-indigo-200 transition-all"
                   value={quickViewDate}
                   onChange={e => setQuickViewDate(e.target.value)}
                 >
@@ -1682,19 +1855,19 @@ const GameRoadmap = ({ user }) => {
                   <button onClick={() => {
                     const d = new Date(quickViewDate); d.setDate(d.getDate() - 1);
                     setQuickViewDate(formatDateToYMD(d));
-                  }} className="w-10 h-10 rounded-xl bg-white border border-slate-200 text-slate-500 font-black shadow-sm hover:bg-indigo-50 hover:text-indigo-600 transition-colors cursor-pointer shrink-0">←</button>
-                  
+                  }} className="w-10 h-10 rounded-xl bg-white border border-slate-200 text-slate-500 font-black shadow-sm hover:bg-indigo-50 hover:text-indigo-600 hover:ring-2 hover:ring-indigo-200 transition-all cursor-pointer shrink-0">←</button>
+
                   <input type="date" value={quickViewDate} onChange={e => setQuickViewDate(e.target.value)}
-                    className="flex-1 px-2 md:px-4 py-2.5 rounded-xl border-2 border-slate-200 outline-none font-bold text-slate-700 bg-white text-sm" />
-                  
+                    className="flex-1 px-3 md:px-4 py-2.5 rounded-xl border border-slate-200 outline-none font-bold text-slate-700 bg-white text-sm hover:ring-2 hover:ring-indigo-200 focus:ring-2 focus:ring-indigo-300 transition-all" />
+
                   <button onClick={() => {
                     const d = new Date(quickViewDate); d.setDate(d.getDate() + 1);
                     setQuickViewDate(formatDateToYMD(d));
-                  }} className="w-10 h-10 rounded-xl bg-white border border-slate-200 text-slate-500 font-black shadow-sm hover:bg-indigo-50 hover:text-indigo-600 transition-colors cursor-pointer shrink-0">→</button>
+                  }} className="w-10 h-10 rounded-xl bg-white border border-slate-200 text-slate-500 font-black shadow-sm hover:bg-indigo-50 hover:text-indigo-600 hover:ring-2 hover:ring-indigo-200 transition-all cursor-pointer shrink-0">→</button>
                 </div>
 
-                <button onClick={() => setQuickViewDate(todayYMD)} 
-                  className={`w-full sm:w-auto text-[11px] font-black px-4 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer ${quickViewDate === todayYMD ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'}`}>
+                <button onClick={() => setQuickViewDate(todayYMD)}
+                  className={`w-full sm:w-auto text-[11px] font-black px-5 py-2.5 rounded-xl transition-all shadow-sm cursor-pointer hover:ring-2 hover:ring-indigo-200 ${quickViewDate === todayYMD ? 'bg-indigo-600 text-white' : 'bg-slate-100 text-slate-600 border border-slate-200 hover:bg-slate-200'}`}>
                   HÔM NAY
                 </button>
               </div>
@@ -1708,27 +1881,28 @@ const GameRoadmap = ({ user }) => {
                 </div>
 
                 {quickViewSchedule.length === 0 ? (
-                  <div className="text-[13px] italic text-slate-400 py-10 text-center border-2 border-dashed border-slate-100 rounded-2xl">
-                    Chưa có lịch trình nào cho ngày này.<br/>
-                    <span className="text-[11px] text-indigo-400">Bạn có thể tạo mới trong mục Cài đặt ⚙️</span>
+                  <div className="flex flex-col items-center justify-center py-14 text-center border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50/50">
+                    <div className="text-5xl mb-4 opacity-40">📋</div>
+                    <div className="text-[14px] font-bold text-slate-400">Chưa có lịch trình nào</div>
+                    <div className="text-[11px] text-slate-400 mt-1.5">Bạn có thể tạo mới trong mục Cài đặt ⚙️</div>
                   </div>
                 ) : (
                   <div className="space-y-3">
                     {quickViewSchedule.map(item => {
                       const isDone = (item.completedDates || []).includes(quickViewDate);
                       return (
-                        <div key={item.id} className={`flex flex-col md:flex-row md:items-center gap-3 md:gap-4 p-3.5 rounded-2xl border-2 transition-all ${isDone ? 'bg-slate-50 border-slate-100 opacity-70' : 'bg-white border-indigo-50 shadow-sm hover:border-indigo-200'}`}>
-                          
+                        <div key={item.id} className={`flex flex-col md:flex-row md:items-center gap-3 md:gap-4 p-4 rounded-2xl border transition-all duration-200 ${isDone ? 'bg-slate-50 border-slate-100 opacity-70' : 'bg-white border-slate-200 shadow-sm hover:shadow-md hover:-translate-y-0.5 hover:border-indigo-200'}`}>
+
                           <div className="flex items-center gap-3 flex-1 min-w-0">
                             <button onClick={() => handleToggleDailyTask(item.id, quickViewDate)}
-                              className={`w-7 h-7 rounded-full flex items-center justify-center text-sm shrink-0 transition-colors shadow-inner cursor-pointer ${isDone ? 'bg-emerald-500 text-white border border-emerald-600' : 'bg-slate-50 border-2 border-slate-300 text-transparent hover:border-emerald-400'}`}>
+                              className={`w-8 h-8 rounded-full flex items-center justify-center text-sm shrink-0 transition-all cursor-pointer ${isDone ? 'bg-emerald-500 text-white border-2 border-emerald-400 shadow-[0_0_8px_rgba(16,185,129,0.3)]' : 'bg-white border-2 border-slate-300 text-transparent hover:border-emerald-400 hover:bg-emerald-50'}`}>
                               ✔
                             </button>
-                            
-                            <div className={`text-[12px] md:text-[14px] font-black font-mono px-2 py-1 rounded-xl border shrink-0 text-center ${isDone ? 'bg-slate-100 text-slate-400 border-slate-200' : 'bg-indigo-50 text-indigo-600 border-indigo-200'}`}>
-                              {item.time} {item.endTime && <><br/><span className="text-[9px] opacity-70">{item.endTime}</span></>}
+
+                            <div className={`text-[12px] md:text-[13px] font-black font-mono px-3 py-1.5 rounded-xl border shrink-0 text-center min-w-[52px] ${isDone ? 'bg-slate-100 text-slate-400 border-slate-200' : 'bg-indigo-50 text-indigo-600 border-indigo-100'}`}>
+                              {item.time} {item.endTime && <><br /><span className="text-[9px] opacity-60">{item.endTime}</span></>}
                             </div>
-                            
+
                             <div className="flex-1 min-w-0">
                               <div className={`text-[13px] md:text-[14px] font-bold truncate ${isDone ? 'line-through text-slate-400' : 'text-slate-700'}`}>
                                 {item.task}
@@ -1742,7 +1916,7 @@ const GameRoadmap = ({ user }) => {
                               </div>
                             </div>
                           </div>
-                          
+
                           <button onClick={() => handleToggleShareDailyTask(item.id)}
                             className={`shrink-0 text-[10px] font-black px-3 py-1.5 rounded-xl border transition-all cursor-pointer w-fit md:ml-auto ${item.isShared ? 'bg-pink-100 text-pink-600 border-pink-200 hover:bg-pink-200' : 'bg-slate-100 text-slate-500 border-slate-200 hover:bg-slate-200'}`}>
                             {item.isShared ? '📢 Công khai' : '🔒 Riêng tư'}
@@ -1766,7 +1940,7 @@ const GameRoadmap = ({ user }) => {
           <div className="w-full max-w-[420px] rounded-[2rem] overflow-hidden shadow-[0_20px_60px_rgba(0,0,0,0.1)] bg-white relative flex flex-col" onClick={e => e.stopPropagation()}
             style={{ border: `3px solid ${getCat(selectedEventDetail.category).border}` }}>
             {(() => {
-              const cat  = getCat(selectedEventDetail.category);
+              const cat = getCat(selectedEventDetail.category);
               const stat = getStat(selectedEventDetail.status);
               return (
                 <>
@@ -1865,7 +2039,7 @@ const GameRoadmap = ({ user }) => {
               {urgentEvents.length === 0 ? (
                 <div className="text-center py-10 bg-white rounded-3xl border-2 border-dashed border-slate-200">
                   <div className="text-5xl mb-3">☕</div>
-                  <div className="text-[13px] font-black text-slate-500">Chưa có hạn chót nào trong 3 ngày tới.<br/><span className="text-indigo-400 text-[11px]">Mọi thứ đang nằm trong tầm kiểm soát!</span></div>
+                  <div className="text-[13px] font-black text-slate-500">Chưa có hạn chót nào trong 3 ngày tới.<br /><span className="text-indigo-400 text-[11px]">Mọi thứ đang nằm trong tầm kiểm soát!</span></div>
                 </div>
               ) : urgentEvents.sort((a, b) => a.end - b.end).map(ev => {
                 const daysLeft = getDaysLeft(ev);
@@ -1931,7 +2105,7 @@ const GameRoadmap = ({ user }) => {
               </div>
               <button onClick={() => setViewingFriendFeed(null)}
                 className="absolute top-5 right-5 w-10 h-10 rounded-full flex items-center justify-center font-black bg-white/80 text-slate-500 hover:bg-white hover:text-pink-500 border-2 border-white shadow-md backdrop-blur-sm transition-all z-20 cursor-pointer">✕</button>
-              
+
               <div className="absolute -bottom-10 left-6 flex items-end gap-4 z-10">
                 <img src={viewingFriendFeed.profile.avatar} alt="" className="w-24 h-24 rounded-[1.5rem] border-4 object-cover shadow-lg bg-white" style={{ borderColor: 'white' }} />
                 <div className="pb-10 drop-shadow-md">
@@ -1942,7 +2116,13 @@ const GameRoadmap = ({ user }) => {
             </div>
 
             <div className="flex-1 overflow-y-auto pt-16 px-4 md:px-6 pb-6 custom-scrollbar space-y-6">
-              
+              {viewingFriendFeed.profile.bio && (
+                <div className="text-[12px] text-slate-700 italic bg-white/50 p-3 rounded-xl shadow-inner border border-white/40">
+                  "{viewingFriendFeed.profile.bio}"
+                </div>
+              )}
+
+
               {/* LỊCH NGÀY PUBLIC */}
               <div>
                 <h4 className="text-[11px] font-black text-indigo-500 uppercase mb-3 flex items-center gap-1.5 ml-2">
@@ -1957,7 +2137,7 @@ const GameRoadmap = ({ user }) => {
                     {viewingFriendFeed.daily.map(t => {
                       const isDone = (t.completedDates || []).includes(viewingFriendFeed.viewDate);
                       const myReaction = (t.reactions || {})[user?.uid];
-                      
+
                       const reactionCounts = {};
                       REACTIONS.forEach(emo => {
                         const count = Object.values(t.reactions || {}).filter(r => r === emo).length;
@@ -1968,12 +2148,12 @@ const GameRoadmap = ({ user }) => {
                         <div key={t.id} id={`public-item-${t.id}`} className="bg-white rounded-3xl border border-indigo-100 shadow-sm p-4 hover:shadow-md transition-all scroll-mt-20">
                           <div className={`flex items-center gap-3 ${isDone ? 'opacity-60' : ''}`}>
                             <div className={`text-[12px] md:text-[14px] font-black font-mono px-2 py-1 rounded-lg text-center ${isDone ? 'bg-slate-100 text-slate-400' : 'bg-indigo-100 text-indigo-600'}`}>
-                              {t.time} {t.endTime && <><br/><span className="text-[9px]">{t.endTime}</span></>}
+                              {t.time} {t.endTime && <><br /><span className="text-[9px]">{t.endTime}</span></>}
                             </div>
                             <div className={`text-[13px] md:text-[14px] font-bold flex-1 ${isDone ? 'line-through text-slate-400' : 'text-slate-700'}`}>{t.task}</div>
                             {isDone && <span className="text-emerald-500 text-lg font-black mr-2">✔</span>}
                           </div>
-                          
+
                           {/* 🔥 BỘ TƯƠNG TÁC CẢM XÚC THÔNG MINH - MOBILE SAFE */}
                           <div className="flex items-center gap-2 mt-3">
                             {Object.keys(reactionCounts).length > 0 && (
@@ -1986,13 +2166,13 @@ const GameRoadmap = ({ user }) => {
                                 ))}
                               </div>
                             )}
-                            
+
                             <div className="relative">
                               <button onClick={() => setActiveReactionId(activeReactionId === t.id ? null : t.id)}
                                 className={`text-[11px] font-bold px-3 py-1.5 rounded-xl border transition-colors cursor-pointer ${myReaction ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>
                                 {myReaction ? `${myReaction} Đã thả` : '🤍 Thả cảm xúc'}
                               </button>
-                              
+
                               {activeReactionId === t.id && (
                                 <div className="absolute bottom-full left-0 mb-2 flex bg-white shadow-[0_10px_40px_rgba(0,0,0,0.2)] border border-slate-200 rounded-full p-2 gap-1.5 z-50">
                                   {REACTIONS.map(emo => (
@@ -2013,12 +2193,12 @@ const GameRoadmap = ({ user }) => {
                                 <div key={c.id} className="flex gap-2">
                                   <img src={c.avatar} alt="av" className="w-7 h-7 rounded-full object-cover shrink-0 border border-slate-200" />
                                   <div className="flex-1 min-w-0 bg-white p-2.5 rounded-2xl rounded-tl-none border border-slate-100 shadow-sm">
-                                    <div className="text-[11px] font-black text-indigo-900">{c.displayName} <span className="text-slate-400 font-normal ml-1 text-[9px]">{new Date(c.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span></div>
+                                    <div className="text-[11px] font-black text-indigo-900">{c.displayName} <span className="text-slate-400 font-normal ml-1 text-[9px]">{new Date(c.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div>
                                     <div className="text-[12px] text-slate-700 mt-1 break-words leading-relaxed">
                                       {c.replyToName && <span className="font-bold text-indigo-500 mr-1.5">@{c.replyToName}</span>}
                                       {c.text}
                                     </div>
-                                    <button onClick={() => setReplyingTo(p => ({...p, [t.id]: { uid: c.uid, displayName: c.displayName }}))} 
+                                    <button onClick={() => setReplyingTo(p => ({ ...p, [t.id]: { uid: c.uid, displayName: c.displayName } }))}
                                       className="text-[10px] text-slate-400 font-bold hover:text-indigo-600 mt-1.5 transition-colors cursor-pointer inline-block">Phản hồi</button>
                                   </div>
                                 </div>
@@ -2029,14 +2209,14 @@ const GameRoadmap = ({ user }) => {
                             {replyingTo[t.id] && (
                               <div className="flex items-center justify-between bg-indigo-50 px-3 py-1.5 rounded-t-xl text-[10px] text-indigo-600 font-bold border border-b-0 border-indigo-100">
                                 <span>Đang trả lời @{replyingTo[t.id].displayName}</span>
-                                <button onClick={() => setReplyingTo(p => { const newP = {...p}; delete newP[t.id]; return newP; })} className="hover:text-red-500 cursor-pointer">✕</button>
+                                <button onClick={() => setReplyingTo(p => { const newP = { ...p }; delete newP[t.id]; return newP; })} className="hover:text-red-500 cursor-pointer">✕</button>
                               </div>
                             )}
                             <div className="flex gap-2">
-                              <input type="text" placeholder="Viết bình luận..." value={commentInputs[t.id] || ''} onChange={e => setCommentInputs(p => ({...p, [t.id]: e.target.value}))}
-                                className={`flex-1 bg-slate-50 border border-slate-200 px-3 py-2 text-[12px] font-medium outline-none focus:border-indigo-300 ${replyingTo[t.id] ? 'rounded-b-xl rounded-tr-xl' : 'rounded-xl'}`} 
-                                onKeyDown={e => { if(e.key==='Enter' && (commentInputs[t.id] || '').trim()){ handleInteract(viewingFriendFeed.uid, t.id, 'daily', 'comment', commentInputs[t.id], replyingTo[t.id], viewingFriendFeed.viewDate); } }}/>
-                              <button onClick={() => { if((commentInputs[t.id] || '').trim()){ handleInteract(viewingFriendFeed.uid, t.id, 'daily', 'comment', commentInputs[t.id], replyingTo[t.id], viewingFriendFeed.viewDate); } }}
+                              <input type="text" placeholder="Viết bình luận..." value={commentInputs[t.id] || ''} onChange={e => setCommentInputs(p => ({ ...p, [t.id]: e.target.value }))}
+                                className={`flex-1 bg-slate-50 border border-slate-200 px-3 py-2 text-[12px] font-medium outline-none focus:border-indigo-300 ${replyingTo[t.id] ? 'rounded-b-xl rounded-tr-xl' : 'rounded-xl'}`}
+                                onKeyDown={e => { if (e.key === 'Enter' && (commentInputs[t.id] || '').trim()) { handleInteract(viewingFriendFeed.uid, t.id, 'daily', 'comment', commentInputs[t.id], replyingTo[t.id], viewingFriendFeed.viewDate); } }} />
+                              <button onClick={() => { if ((commentInputs[t.id] || '').trim()) { handleInteract(viewingFriendFeed.uid, t.id, 'daily', 'comment', commentInputs[t.id], replyingTo[t.id], viewingFriendFeed.viewDate); } }}
                                 className={`px-4 py-2 bg-indigo-500 text-white text-[11px] font-black hover:bg-indigo-600 transition-colors cursor-pointer shadow-sm ${replyingTo[t.id] ? 'rounded-b-xl rounded-tr-xl' : 'rounded-xl'}`}>Gửi</button>
                             </div>
                           </div>
@@ -2072,7 +2252,7 @@ const GameRoadmap = ({ user }) => {
                       return (
                         <div key={ev.id} id={`public-item-${ev.id}`} className="relative pl-7 scroll-mt-20">
                           <div className="absolute -left-[11px] top-4 w-5 h-5 bg-pink-400 rounded-full border-[4px] border-white shadow-md flex items-center justify-center"></div>
-                          
+
                           <div className="bg-white border-2 border-pink-100 rounded-3xl p-4 shadow-sm hover:shadow-md transition-shadow hover:-translate-y-0.5">
                             <div className="flex items-center gap-2 mb-3">
                               <div className="text-[10px] font-black text-white bg-pink-400 inline-block px-2.5 py-1 rounded-lg shadow-sm">{ev.dateStr}</div>
@@ -2096,13 +2276,13 @@ const GameRoadmap = ({ user }) => {
                                   ))}
                                 </div>
                               )}
-                              
+
                               <div className="relative">
                                 <button onClick={() => setActiveReactionId(activeReactionId === ev.id ? null : ev.id)}
                                   className={`text-[11px] font-bold px-3 py-1.5 rounded-xl border transition-colors cursor-pointer ${myReaction ? 'bg-pink-50 text-pink-600 border-pink-200' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}>
                                   {myReaction ? `${myReaction} Đã thả` : '🤍 Thả cảm xúc'}
                                 </button>
-                                
+
                                 {activeReactionId === ev.id && (
                                   <div className="absolute bottom-full left-0 mb-2 flex bg-white shadow-[0_10px_40px_rgba(0,0,0,0.2)] border border-slate-200 rounded-full p-2 gap-1.5 z-50">
                                     {REACTIONS.map(emo => (
@@ -2123,12 +2303,12 @@ const GameRoadmap = ({ user }) => {
                                   <div key={c.id} className="flex gap-2">
                                     <img src={c.avatar} alt="av" className="w-7 h-7 rounded-full object-cover shrink-0 border border-slate-200" />
                                     <div className="flex-1 min-w-0 bg-white p-2.5 rounded-2xl rounded-tl-none border border-slate-100 shadow-sm">
-                                      <div className="text-[11px] font-black text-pink-900">{c.displayName} <span className="text-slate-400 font-normal ml-1 text-[9px]">{new Date(c.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span></div>
+                                      <div className="text-[11px] font-black text-pink-900">{c.displayName} <span className="text-slate-400 font-normal ml-1 text-[9px]">{new Date(c.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div>
                                       <div className="text-[12px] text-slate-700 mt-1 break-words leading-relaxed">
                                         {c.replyToName && <span className="font-bold text-pink-500 mr-1.5">@{c.replyToName}</span>}
                                         {c.text}
                                       </div>
-                                      <button onClick={() => setReplyingTo(p => ({...p, [ev.id]: { uid: c.uid, displayName: c.displayName }}))} 
+                                      <button onClick={() => setReplyingTo(p => ({ ...p, [ev.id]: { uid: c.uid, displayName: c.displayName } }))}
                                         className="text-[10px] text-slate-400 font-bold hover:text-pink-600 mt-1.5 transition-colors cursor-pointer inline-block">Phản hồi</button>
                                     </div>
                                   </div>
@@ -2139,14 +2319,14 @@ const GameRoadmap = ({ user }) => {
                               {replyingTo[ev.id] && (
                                 <div className="flex items-center justify-between bg-pink-50 px-3 py-1.5 rounded-t-xl text-[10px] text-pink-600 font-bold border border-b-0 border-pink-100">
                                   <span>Đang trả lời @{replyingTo[ev.id].displayName}</span>
-                                  <button onClick={() => setReplyingTo(p => { const newP = {...p}; delete newP[ev.id]; return newP; })} className="hover:text-red-500 cursor-pointer">✕</button>
+                                  <button onClick={() => setReplyingTo(p => { const newP = { ...p }; delete newP[ev.id]; return newP; })} className="hover:text-red-500 cursor-pointer">✕</button>
                                 </div>
                               )}
                               <div className="flex gap-2">
-                                <input type="text" placeholder="Viết bình luận..." value={commentInputs[ev.id] || ''} onChange={e => setCommentInputs(p => ({...p, [ev.id]: e.target.value}))}
-                                  className={`flex-1 bg-slate-50 border border-slate-200 px-3 py-2 text-[12px] font-medium outline-none focus:border-pink-300 ${replyingTo[ev.id] ? 'rounded-b-xl rounded-tr-xl' : 'rounded-xl'}`} 
-                                  onKeyDown={e => { if(e.key==='Enter' && (commentInputs[ev.id] || '').trim()){ handleInteract(viewingFriendFeed.uid, ev.id, 'event', 'comment', commentInputs[ev.id], replyingTo[ev.id]); } }}/>
-                                <button onClick={() => { if((commentInputs[ev.id] || '').trim()){ handleInteract(viewingFriendFeed.uid, ev.id, 'event', 'comment', commentInputs[ev.id], replyingTo[ev.id]); } }}
+                                <input type="text" placeholder="Viết bình luận..." value={commentInputs[ev.id] || ''} onChange={e => setCommentInputs(p => ({ ...p, [ev.id]: e.target.value }))}
+                                  className={`flex-1 bg-slate-50 border border-slate-200 px-3 py-2 text-[12px] font-medium outline-none focus:border-pink-300 ${replyingTo[ev.id] ? 'rounded-b-xl rounded-tr-xl' : 'rounded-xl'}`}
+                                  onKeyDown={e => { if (e.key === 'Enter' && (commentInputs[ev.id] || '').trim()) { handleInteract(viewingFriendFeed.uid, ev.id, 'event', 'comment', commentInputs[ev.id], replyingTo[ev.id]); } }} />
+                                <button onClick={() => { if ((commentInputs[ev.id] || '').trim()) { handleInteract(viewingFriendFeed.uid, ev.id, 'event', 'comment', commentInputs[ev.id], replyingTo[ev.id]); } }}
                                   className={`px-4 py-2 bg-pink-500 text-white text-[11px] font-black hover:bg-pink-600 transition-colors cursor-pointer shadow-sm ${replyingTo[ev.id] ? 'rounded-b-xl rounded-tr-xl' : 'rounded-xl'}`}>Gửi</button>
                               </div>
                             </div>
@@ -2165,7 +2345,8 @@ const GameRoadmap = ({ user }) => {
       )}
 
       {/* SCROLLBAR STYLES */}
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         .custom-scrollbar::-webkit-scrollbar { height: 6px; width: 6px; background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(244,114,182,0.4); border-radius: 6px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(236,72,153,0.6); }
