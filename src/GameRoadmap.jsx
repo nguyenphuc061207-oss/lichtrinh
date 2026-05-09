@@ -166,13 +166,22 @@ const GameRoadmap = ({ user }) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         let loadedProfile = data.profile ? { ...data.profile } : { ...profile };
-        let needsSave = false;
-        if (!loadedProfile.shortId || loadedProfile.shortId === "........") { loadedProfile.shortId = generateID(); needsSave = true; }
-        if (!loadedProfile.displayName) { loadedProfile.displayName = "Người dùng mới"; needsSave = true; }
-        if (!loadedProfile.background) { loadedProfile.background = loadedProfile.avatar || profile.background; needsSave = true; }
+        
+        // Tránh ghi đè dữ liệu từ cache cục bộ (ví dụ: do fcmToken vừa ghi)
+        const isPartialCache = docSnap.metadata.hasPendingWrites && !data.profile;
+        
+        if (!isPartialCache) {
+          let needsSave = false;
+          if (!loadedProfile.shortId || loadedProfile.shortId === "........") { loadedProfile.shortId = generateID(); needsSave = true; }
+          if (!loadedProfile.displayName) { loadedProfile.displayName = "Người dùng mới"; needsSave = true; }
+          if (!loadedProfile.background) { loadedProfile.background = loadedProfile.avatar || profile.background; needsSave = true; }
+          
+          if (needsSave) {
+            setDoc(doc(db, "users", user.uid), { profile: loadedProfile }, { merge: true });
+          }
+        }
+        
         setProfile(loadedProfile);
-
-        if (needsSave) setDoc(doc(db, "users", user.uid), { profile: loadedProfile }, { merge: true });
 
         if (Array.isArray(data.events)) {
           setEvents(data.events.map(ev => ({
@@ -216,7 +225,8 @@ const GameRoadmap = ({ user }) => {
       } else {
         const newProfile = { ...profile, shortId: generateID() };
         setProfile(newProfile);
-        saveToCloud(newProfile, [], [], [], [], []);
+        // Chỉ khởi tạo profile, không ghi đè các mảng bằng mảng rỗng để an toàn
+        setDoc(doc(db, "users", user.uid), { profile: newProfile }, { merge: true });
       }
       setIsLoading(false);
     });
